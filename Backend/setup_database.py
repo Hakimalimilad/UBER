@@ -18,7 +18,7 @@ def run_command(cmd, description):
             create_tables()
         elif "seed_admin.py" in cmd:
             seed_admin()
-            # seed_test_users()  # Removed test users seeding
+            # No test users - only unified admin
         else:
             print(f" Unknown command: {cmd}")
             return False
@@ -100,12 +100,12 @@ def main():
     print("=" * 50)
     print(" Database reset and recreated")
     print(" Tables created")
-    print(" Admin account seeded")
+    print(" Unified admin account seeded")
     print("\n Ready to use:")
     print("   Backend: python app.py")
     print("   Frontend: npm run dev")
-    print("\n Admin Account:")
-    print(f"   Admin:   {os.getenv('ADMIN_EMAIL', 'admin@yourdomain.com')} / {os.getenv('ADMIN_PASSWORD', 'changeme123')}")
+    print("\n Unified Admin Account:")
+    print(f"   Admin:   {os.getenv('ADMIN_EMAIL', 'ethiraaount@gmail.com')} / {os.getenv('ADMIN_PASSWORD', '221180407')}")
 
     return True
 

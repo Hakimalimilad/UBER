@@ -1,24 +1,42 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, ChangeEvent, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+
+interface FormData {
+  email: string;
+  password: string;
+  full_name: string;
+  user_type: string;
+}
 
 export default function Home() {
   const router = useRouter();
-  const [isLogin, setIsLogin] = useState(true);
-  const [formData, setFormData] = useState({
+  const [isLogin, setIsLogin] = useState<boolean>(true);
+  const [showForgotPassword, setShowForgotPassword] = useState<boolean>(false);
+  const [formData, setFormData] = useState<FormData>({
     email: '',
     password: '',
     full_name: '',
     user_type: 'student'
   });
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [registrationSuccess, setRegistrationSuccess] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState('');
-  const [resendStatus, setResendStatus] = useState(''); // Track resend status
+  const [forgotEmail, setForgotEmail] = useState<string>('');
+  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(false);
+  const [registrationSuccess, setRegistrationSuccess] = useState<boolean>(false);
+  const [registeredEmail, setRegisteredEmail] = useState<string>('');
+  const [resendStatus, setResendStatus] = useState<string>(''); // Track resend status
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState<boolean>(false);
+  const [forgotPasswordSuccess, setForgotPasswordSuccess] = useState<string>('');
 
-  const handleSubmit = async (e) => {
+  const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -49,53 +67,44 @@ export default function Home() {
         throw new Error(data.error || `Login failed (${response.status})`);
       }
 
-      // Handle registration vs login differently
-      if (!isLogin) {
-        // Registration successful - show success message (persistent)
-        setRegistrationSuccess(true);
-        setRegisteredEmail(formData.email);
-        setError(''); // Clear any previous errors
-
-        // Don't auto-reset - let user manually switch modes or refresh
-      } else {
-        // Login successful - store token and redirect
+      if (isLogin) {
+        // Store token and user data
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data.user));
 
         // Redirect based on user type
-        const userType = data.user?.user_type;
-        if (userType === 'admin') {
+        if (data.user.user_type === 'admin') {
           router.push('/admin');
-        } else if (userType === 'driver') {
+        } else if (data.user.user_type === 'driver') {
           router.push('/driver');
         } else {
           router.push('/student');
         }
+      } else {
+        // Registration successful
+        setRegistrationSuccess(true);
+        setRegisteredEmail(formData.email);
+        setFormData({
+          email: '',
+          password: '',
+          full_name: '',
+          user_type: 'student'
+        });
       }
-    } catch (err) {
-      console.error('Form submission error:', err);
+
+    } catch (err: any) {
+      console.error('Auth error:', err);
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
-
-  // Resend verification email
-  const resendVerificationEmail = async (email) => {
-    if (!email) {
-      setError('Please enter your email address first');
-      return;
-    }
+  const resendVerificationEmail = async (email: string) => {
+    setLoading(true);
+    setError('');
 
     try {
-      setError('');
-      setLoading(true);
-      setResendStatus('sending');
-
       const response = await fetch('http://localhost:5000/api/auth/resend-verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -111,7 +120,7 @@ export default function Home() {
       } else {
         throw new Error(data.error || 'Failed to resend verification email');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Resend verification error:', err);
       setError(err.message);
       setResendStatus('error');
@@ -122,16 +131,43 @@ export default function Home() {
     }
   };
 
-  // Quick login buttons for testing
-  const quickLogin = (email, password) => {
-    setFormData({ ...formData, email, password });
-    setIsLogin(true);
+  const handleForgotPassword = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError('');
+    setForgotPasswordSuccess('');
 
-    // Auto-submit after setting data
-    setTimeout(() => {
-      const form = document.querySelector('form');
-      if (form) form.requestSubmit();
-    }, 100);
+    if (!forgotEmail) {
+      setError('Please enter your email address.');
+      return;
+    }
+
+    setForgotPasswordLoading(true);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setForgotPasswordSuccess('Password reset instructions have been sent to your email address.');
+        setForgotEmail('');
+        setTimeout(() => {
+          setShowForgotPassword(false);
+          setForgotPasswordSuccess('');
+        }, 3000);
+      } else {
+        throw new Error(data.error || 'Failed to send reset email');
+      }
+    } catch (err: any) {
+      console.error('Forgot password error:', err);
+      setError(err.message);
+    } finally {
+      setForgotPasswordLoading(false);
+    }
   };
 
   return (
@@ -172,6 +208,60 @@ export default function Home() {
             </button>
           </div>
 
+          {/* Forgot Password Modal/Form */}
+          {showForgotPassword && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-blue-900">Reset Password</h3>
+                <button
+                  onClick={() => setShowForgotPassword(false)}
+                  className="text-blue-600 hover:text-blue-800"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {forgotPasswordSuccess ? (
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <p className="text-green-700 text-sm">{forgotPasswordSuccess}</p>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotPassword} className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-blue-700 mb-1">
+                      Email Address
+                    </label>
+                    <input
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => setForgotEmail(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 border border-blue-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 text-sm"
+                      placeholder="Enter your email address"
+                    />
+                  </div>
+
+                  {error && (
+                    <p className="text-red-600 text-sm">{error}</p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={forgotPasswordLoading}
+                    className="w-full bg-blue-600 text-white py-2 px-4 rounded-md font-medium hover:bg-blue-700 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed text-sm"
+                  >
+                    {forgotPasswordLoading ? 'Sending...' : 'Send Reset Instructions'}
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+
           {/* Success Message for Registration */}
           {registrationSuccess && (
             <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
@@ -187,7 +277,7 @@ export default function Home() {
           )}
 
           {/* Error Message */}
-          {error && !registrationSuccess && (
+          {error && !registrationSuccess && !showForgotPassword && (
             <div className={`mb-4 p-3 border rounded-lg text-sm ${
               error.includes('verify your email')
                 ? 'bg-yellow-50 border-yellow-200 text-yellow-700'
@@ -308,30 +398,16 @@ export default function Home() {
             </button>
           </form>
 
-          {/* Quick Login for Testing - Hidden during registration success */}
-          {isLogin && !registrationSuccess && (
-            <div className="mt-6 pt-6 border-t border-gray-200">
-              <p className="text-xs text-gray-500 mb-3 text-center">Quick Login (Testing)</p>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  onClick={() => quickLogin('admin@transport.com', 'admin123')}
-                  className="px-3 py-2 text-xs bg-purple-100 text-purple-700 rounded-md hover:bg-purple-200 transition-colors"
-                >
-                  Admin
-                </button>
-                <button
-                  onClick={() => quickLogin('student@test.com', 'student123')}
-                  className="px-3 py-2 text-xs bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors"
-                >
-                  Student
-                </button>
-                <button
-                  onClick={() => quickLogin('driver@test.com', 'driver123')}
-                  className="px-3 py-2 text-xs bg-green-100 text-green-700 rounded-md hover:bg-green-200 transition-colors"
-                >
-                  Driver
-                </button>
-              </div>
+          {/* Forgot Password Link */}
+          {isLogin && !showForgotPassword && (
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-sm text-indigo-600 hover:text-indigo-800 transition-colors"
+              >
+                Forgot your password?
+              </button>
             </div>
           )}
         </div>

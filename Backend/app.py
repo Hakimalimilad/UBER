@@ -139,32 +139,36 @@ def login():
     """Login user."""
     try:
         data = request.get_json()
-        
+
         # Get user
         user = get_user_by_email(data['email'])
         if not user:
             return jsonify({'error': 'Invalid credentials'}), 401
-        
+
         # Verify password
         if not verify_password(user['password_hash'], data['password']):
             return jsonify({'error': 'Invalid credentials'}), 401
-        
-        # Check if email is verified - ENFORCED for security
-        if not user.get('is_verified'):
+
+        # Check if email is verified - ENFORCED for security, except for admin
+        if not user.get('is_verified') and user.get('user_type') != 'admin':
             return jsonify({'error': 'Please verify your email before logging in'}), 403
-        
+
+        # Check if user is approved - ENFORCED for all users except admins
+        if not user.get('is_approved') and user.get('user_type') != 'admin':
+            return jsonify({'error': 'Your account is pending admin approval. Please wait for approval before logging in.'}), 403
+
         # Generate token
         token = generate_token(user['id'], user['user_type'])
-        
+
         # Remove password from response
         user.pop('password_hash', None)
-        
+
         return jsonify({
             'message': 'Login successful',
             'token': token,
             'user': user
         }), 200
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -281,6 +285,34 @@ def forgot_password():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/auth/validate-reset-token', methods=['POST'])
+def validate_reset_token_endpoint():
+    """Validate password reset token."""
+    try:
+        data = request.get_json()
+        token = data.get('token')
+
+        if not token:
+            return jsonify({'error': 'Token is required'}), 400
+
+        # Verify token
+        user = verify_reset_token(token)
+
+        if user:
+            return jsonify({
+                'valid': True,
+                'message': 'Token is valid'
+            }), 200
+        else:
+            return jsonify({
+                'valid': False,
+                'error': 'Invalid or expired reset token'
+            }), 400
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/auth/reset-password', methods=['POST'])
 def reset_password_endpoint():
     """Reset password using token from email."""
@@ -288,25 +320,21 @@ def reset_password_endpoint():
         data = request.get_json()
         token = data.get('token')
         new_password = data.get('password')
-        
+
         if not token or not new_password:
             return jsonify({'error': 'Token and new password are required'}), 400
-        
+
         # Reset password
         success = reset_password(token, new_password)
-        
+
         if success:
             return jsonify({'message': 'Password reset successfully! You can now login with your new password.'}), 200
         else:
             return jsonify({'error': 'Invalid or expired reset token'}), 400
-            
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
-# ============================================
-# ADMIN ENDPOINTS
-# ============================================
 
 @app.route('/api/admin/users', methods=['GET'])
 @admin_required
@@ -314,14 +342,143 @@ def get_users(current_user):
     """Get all users (admin only)."""
     try:
         users = get_all_users()
-        # Remove password hashes
+        # Remove password hashes and map fields for frontend
         for user in users:
             user.pop('password_hash', None)
-        
+            # Ensure required fields exist for frontend
+            user['full_name'] = user.get('full_name', 'Unknown User')
+            user['email'] = user.get('email', '')
+            user['user_type'] = user.get('user_type', 'student')
+            user['created_at'] = user.get('created_at', '')
+            user['is_verified'] = user.get('is_verified', False)
+            user['is_approved'] = user.get('is_approved', False)
+
         return jsonify({
             'users': users,
             'total': len(users)
         }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/students', methods=['GET'])
+@admin_required
+def get_students(current_user):
+    """Get all students (admin only)."""
+    try:
+        # For now, return users with student role
+        # In a real app, you'd have a separate students table
+        users = get_all_users()
+        students = [user for user in users if user.get('user_type') == 'student']
+
+        # Add mock student data for demonstration and map fields properly for frontend
+        for student in students:
+            # Map user fields to student fields expected by frontend
+            student['name'] = student.get('full_name', 'Unknown Student')
+            student['email'] = student.get('email', '')
+            student['student_id'] = f"STU{student['id']:03d}"
+            student['pickup_location'] = 'Main Campus'
+            student['dropoff_location'] = 'Downtown'
+            student['parent_name'] = 'Parent Name'
+            student['parent_phone'] = '+1234567890'
+            student['emergency_contact'] = '+0987654321'
+            student['is_active'] = True
+            student['is_verified'] = student.get('is_verified', False)
+            student['rides_count'] = 0
+
+        return jsonify({
+            'students': students,
+            'total': len(students)
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/drivers', methods=['GET'])
+@admin_required
+def get_drivers(current_user):
+    """Get all drivers (admin only)."""
+    try:
+        # For now, return users with driver role
+        # In a real app, you'd have a separate drivers table
+        users = get_all_users()
+        drivers = [user for user in users if user.get('user_type') == 'driver']
+
+        # Add mock driver data for demonstration and map fields properly for frontend
+        for driver in drivers:
+            # Map user fields to driver fields expected by frontend
+            driver['name'] = driver.get('full_name', 'Unknown Driver')
+            driver['email'] = driver.get('email', '')
+            driver['license_number'] = f"DL{driver['id']:06d}"
+            driver['vehicle_type'] = 'Sedan'
+            driver['vehicle_model'] = 'Toyota Camry'
+            driver['vehicle_plate'] = f"ABC{driver['id']:03d}"
+            driver['capacity'] = 4
+            driver['is_active'] = True
+            driver['is_verified'] = driver.get('is_verified', False)
+            driver['rides_completed'] = 0
+            driver['rating'] = 4.5
+
+        return jsonify({
+            'drivers': drivers,
+            'statistics': {
+                'total_drivers': len(drivers),
+                'active_drivers': len([d for d in drivers if d.get('is_active', False)]),
+                'inactive_drivers': len([d for d in drivers if not d.get('is_active', False)]),
+                'verified_drivers': len([d for d in drivers if d.get('is_verified', False)])
+            },
+            'total': len(drivers)
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/pending-users', methods=['GET'])
+@admin_required
+def get_pending_users_endpoint(current_user):
+    """Get all users pending admin approval."""
+    try:
+        from models import get_pending_users
+        users = get_pending_users()
+
+        return jsonify({
+            'users': users,
+            'total': len(users)
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/approve-user/<int:user_id>', methods=['POST'])
+@admin_required
+def approve_user_endpoint(current_user, user_id):
+    """Approve a user for full system access."""
+    try:
+        from models import approve_user, get_user_by_id
+
+        # Get user details for email
+        user = get_user_by_id(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Approve the user
+        success = approve_user(user_id)
+
+        if success:
+            # Send approval email
+            email_sent = send_approval_email(
+                email=user['email'],
+                name=user['full_name'],
+                user_type=user['user_type']
+            )
+
+            return jsonify({
+                'message': f'User {user["full_name"]} approved successfully!',
+                'email_sent': email_sent
+            }), 200
+        else:
+            return jsonify({'error': 'Failed to approve user'}), 400
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

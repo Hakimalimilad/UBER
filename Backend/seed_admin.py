@@ -1,22 +1,22 @@
 """
-Seed Admin Account - Creates default admin user for production
+Seed Admin Account - Creates unified admin user for production
 Run this once to create an admin account: python seed_admin.py
 """
 
-from models import create_user, get_user_by_email
+from models import create_user, get_user_by_email, mark_user_verified
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
 def seed_admin():
-    """Create default admin account using environment variables."""
+    """Create unified admin account using environment variables."""
 
-    admin_email = os.getenv('ADMIN_EMAIL', 'admin@yourdomain.com')
-    admin_password = os.getenv('ADMIN_PASSWORD', 'changeme123')
+    admin_email = os.getenv('ADMIN_EMAIL', 'ethiraaount@gmail.com')
+    admin_password = os.getenv('ADMIN_PASSWORD', '221180407')
     admin_name = os.getenv('ADMIN_NAME', 'Administrator')
 
-    print("🌱 Seeding admin account...")
+    print("🌱 Seeding unified admin account...")
 
     # Check if admin already exists
     existing_admin = get_user_by_email(admin_email)
@@ -35,12 +35,15 @@ def seed_admin():
             full_name=admin_name,
             user_type='admin'
         )
+        
+        # Mark admin as verified to bypass email verification
+        mark_user_verified(user_id)
 
-        print("✅ Admin account created successfully!")
+        print("✅ Unified admin account created successfully!")
         print(f"   Email: {admin_email}")
         print(f"   Password: {admin_password}")
         print(f"   User ID: {user_id}")
-        print("\n⚠️  IMPORTANT: Change this password after first login!")
+        print("\n⚠️  You can now log in as admin with these credentials!")
 
     except Exception as e:
         print(f"❌ Error creating admin: {e}")
@@ -57,9 +60,9 @@ if __name__ == '__main__':
         print("\n" + "=" * 60)
         print("✅ Admin seeding complete!")
         print("=" * 60)
-        print("\nAdmin Account:")
-        print(f"  Admin:   {os.getenv('ADMIN_EMAIL', 'admin@yourdomain.com')} / {os.getenv('ADMIN_PASSWORD', 'changeme123')}")
-        print("\n⚠️  Remember to change passwords in production!")
+        print("\nUnified Admin Account:")
+        print(f"  Admin:   {os.getenv('ADMIN_EMAIL', 'ethiraaount@gmail.com')} / {os.getenv('ADMIN_PASSWORD', '221180407')}")
+        print("\n✅ Ready to use! Admin has full permissions for oversight and analytics.")
 
     except Exception as e:
         print(f"\n❌ Seeding failed: {e}")

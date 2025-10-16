@@ -33,11 +33,11 @@ def get_db_connection():
 
 
 def create_tables():
-    """Create users table only - keep it simple."""
+    """Create users table only """
     conn = get_db_connection()
     cursor = conn.cursor()
-    
-    # Users table with email verification
+
+    # Users table with email verification and approval system
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -47,20 +47,23 @@ def create_tables():
             user_type ENUM('student', 'driver', 'admin') NOT NULL,
             phone VARCHAR(50),
             is_verified BOOLEAN DEFAULT FALSE,
+            is_approved BOOLEAN DEFAULT FALSE,
             verification_token VARCHAR(255),
             reset_token VARCHAR(255),
             reset_token_expiry DATETIME,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             INDEX idx_email (email),
             INDEX idx_verification_token (verification_token),
-            INDEX idx_reset_token (reset_token)
+            INDEX idx_reset_token (reset_token),
+            INDEX idx_approval_status (is_approved, is_verified)
         )
     ''')
-    
+
     conn.commit()
     cursor.close()
     conn.close()
-    print("✅ Users table created!")
+    print("✅ Users table created with approval system!")
+    
 
 
 # ============================================
@@ -71,19 +74,19 @@ def create_user(email, password, full_name, user_type):
     """Create a new user."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     password_hash = generate_password_hash(password)
-    
+
     cursor.execute(
-        'INSERT INTO users (email, password_hash, full_name, user_type) VALUES (%s, %s, %s, %s)',
-        (email, password_hash, full_name, user_type)
+        'INSERT INTO users (email, password_hash, full_name, user_type, is_verified, is_approved) VALUES (%s, %s, %s, %s, %s, %s)',
+        (email, password_hash, full_name, user_type, False, False)  # New users start unverified and unapproved
     )
-    
+
     conn.commit()
     user_id = cursor.lastrowid
     cursor.close()
     conn.close()
-    
+
     return user_id
 
 
@@ -143,27 +146,78 @@ def save_verification_token(user_id, token):
 
 
 def verify_email_token(token):
-    """Verify email using token and mark user as verified."""
+    """Verify email using token and mark user as verified but pending approval."""
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    
+
     cursor.execute(
         'SELECT * FROM users WHERE verification_token = %s',
         (token,)
     )
     user = cursor.fetchone()
-    
+
     if user:
         cursor.execute(
             'UPDATE users SET is_verified = TRUE, verification_token = NULL WHERE id = %s',
             (user['id'],)
         )
         conn.commit()
-    
+
     cursor.close()
     conn.close()
-    
+
     return user is not None
+
+
+def approve_user(user_id):
+    """Approve a user for full system access."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        'UPDATE users SET is_approved = TRUE WHERE id = %s',
+        (user_id,)
+    )
+
+    conn.commit()
+    affected = cursor.rowcount
+    cursor.close()
+    conn.close()
+
+    return affected > 0
+
+
+def get_pending_users():
+    """Get all users who are verified but not yet approved."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute(
+        'SELECT id, full_name, email, user_type, created_at FROM users WHERE is_verified = TRUE AND is_approved = FALSE ORDER BY created_at ASC'
+    )
+    users = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return users
+
+
+def get_user_approval_status(user_id):
+    """Get user's approval status."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute(
+        'SELECT is_verified, is_approved FROM users WHERE id = %s',
+        (user_id,)
+    )
+    status = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    return status
 
 
 def save_reset_token(email, token):
@@ -239,6 +293,21 @@ def get_all_users():
     conn.close()
     
     return users
+
+
+def mark_user_verified(user_id):
+    """Mark a user as verified."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute(
+        'UPDATE users SET is_verified = TRUE WHERE id = %s',
+        (user_id,)
+    )
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 
 def update_user_role(user_id, new_role):
