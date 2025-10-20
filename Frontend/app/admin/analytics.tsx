@@ -96,7 +96,8 @@ const AdminAnalytics = () => {
   };
 
   return (
-    <div className="w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-8 max-w-none sm:max-w-7xl sm:mx-auto space-y-6">
+    <MainLayout>
+      <div className="w-full px-3 sm:px-6 lg:px-8 py-4 sm:py-8 max-w-none sm:max-w-7xl sm:mx-auto space-y-6">
       {/* Header */}
       <div className="bg-white shadow-sm rounded-lg border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200">
@@ -348,6 +349,7 @@ const AdminAnalytics = () => {
         </div>
       )}
     </div>
+    </MainLayout>
   );
 };
 

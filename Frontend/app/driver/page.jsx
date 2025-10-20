@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import MainLayout from '../../components/MainLayout';
 
 export default function DriverDashboard() {
   const router = useRouter();
@@ -77,48 +78,8 @@ export default function DriverDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Driver Dashboard</h1>
-              <p className="text-sm text-gray-600">Welcome, {currentUser?.full_name}</p>
-            </div>
-            <div className="flex items-center gap-4">
-              {/* Availability Toggle */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Status:</span>
-                <button
-                  onClick={toggleAvailability}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    isAvailable ? 'bg-green-600' : 'bg-gray-300'
-                  }`}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      isAvailable ? 'translate-x-6' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-                <span className={`text-sm font-medium ${isAvailable ? 'text-green-600' : 'text-gray-500'}`}>
-                  {isAvailable ? 'Available' : 'Offline'}
-                </span>
-              </div>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <MainLayout>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Earnings Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-lg shadow p-6">
@@ -170,7 +131,7 @@ export default function DriverDashboard() {
             <h2 className="text-lg font-semibold text-gray-900">Today's Rides</h2>
             <p className="text-sm text-gray-600 mt-1">Manage your scheduled rides</p>
           </div>
-          
+
           <div className="p-6">
             <div className="space-y-4">
               {myRides.map((ride) => (
@@ -188,7 +149,7 @@ export default function DriverDashboard() {
                           <p className="text-sm text-gray-600">{ride.passengers} passenger(s)</p>
                         </div>
                       </div>
-                      
+
                       <div className="ml-13 space-y-2">
                         <div className="flex items-center text-sm text-gray-600">
                           <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -205,7 +166,7 @@ export default function DriverDashboard() {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="flex flex-col items-end gap-2">
                       <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
                         {ride.status}
@@ -273,7 +234,7 @@ export default function DriverDashboard() {
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </MainLayout>
   );
 }

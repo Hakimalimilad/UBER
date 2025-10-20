@@ -7,7 +7,7 @@ import mysql.connector
 import os
 import sys
 from models import create_tables
-from seed_admin import seed_admin, seed_test_users
+from seed_admin import seed_admin
 
 def run_command(cmd, description):
     """Run a command and show progress."""
@@ -18,7 +18,6 @@ def run_command(cmd, description):
             create_tables()
         elif "seed_admin.py" in cmd:
             seed_admin()
-            # No test users - only unified admin
         else:
             print(f" Unknown command: {cmd}")
             return False

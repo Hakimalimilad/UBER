@@ -11,8 +11,8 @@ from dotenv import load_dotenv
 from functools import wraps
 from models import (create_user, get_user_by_email, get_user_by_id, verify_password, get_all_users, update_user_role,
                     generate_verification_token, save_verification_token, verify_email_token,
-                    save_reset_token, verify_reset_token, reset_password)
-from email_service import send_verification_email, send_password_reset_email
+                    save_reset_token, verify_reset_token, reset_password, update_user_profile)
+from email_service import send_verification_email, send_password_reset_email, send_approval_email
 import mysql.connector
 
 
@@ -153,11 +153,22 @@ def login():
         if not user.get('is_verified') and user.get('user_type') != 'admin':
             return jsonify({'error': 'Please verify your email before logging in'}), 403
 
-        # Check if user is approved - ENFORCED for all users except admins
+        # Check if user is approved - Allow login but mark as pending approval for non-admins
         if not user.get('is_approved') and user.get('user_type') != 'admin':
-            return jsonify({'error': 'Your account is pending admin approval. Please wait for approval before logging in.'}), 403
+            # Generate token for unapproved user (limited access)
+            token = generate_token(user['id'], user['user_type'])
 
-        # Generate token
+            # Remove password from response
+            user.pop('password_hash', None)
+
+            return jsonify({
+                'message': 'Login successful but account is pending admin approval',
+                'token': token,
+                'user': user,
+                'requires_approval': True
+            }), 200
+
+        # Generate token for approved user
         token = generate_token(user['id'], user['user_type'])
 
         # Remove password from response
@@ -173,16 +184,126 @@ def login():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/auth/me', methods=['GET'])
+@app.route('/api/auth/update-profile', methods=['PUT'])
 @token_required
-def get_current_user(current_user):
-    """Get current user info from token."""
+def update_profile(current_user):
+    """Update user profile with all fields including profile picture."""
     try:
-        user = get_user_by_id(current_user['user_id'])
-        if user:
+        data = request.get_json()
+        
+        # Basic fields (all users)
+        full_name = data.get('full_name')
+        email = data.get('email')
+        phone = data.get('phone')
+        profile_picture = data.get('profilePicture')
+
+        if not full_name or not email:
+            return jsonify({'error': 'Full name and email are required'}), 400
+
+        # Student specific fields
+        student_id = data.get('student_id')
+        major = data.get('major')
+        year = data.get('year')
+        campus_location = data.get('campus_location')
+        pickup_location = data.get('pickup_location')
+        dropoff_location = data.get('dropoff_location')
+        parent_name = data.get('parent_name')
+        parent_phone = data.get('parent_phone')
+        emergency_contact = data.get('emergency_contact')
+
+        # Driver specific fields
+        license_number = data.get('license_number')
+        vehicle_type = data.get('vehicle_type')
+        vehicle_model = data.get('vehicle_model')
+        vehicle_plate = data.get('vehicle_plate')
+        vehicle_color = data.get('vehicle_color')
+        capacity = data.get('capacity')
+
+        # Update profile with all fields
+        success = update_user_profile(
+            user_id=current_user['user_id'],
+            full_name=full_name,
+            email=email,
+            phone=phone,
+            profile_picture=profile_picture,
+            # Student fields
+            student_id=student_id,
+            major=major,
+            year=year,
+            campus_location=campus_location,
+            pickup_location=pickup_location,
+            dropoff_location=dropoff_location,
+            parent_name=parent_name,
+            parent_phone=parent_phone,
+            emergency_contact=emergency_contact,
+            # Driver fields
+            license_number=license_number,
+            vehicle_type=vehicle_type,
+            vehicle_model=vehicle_model,
+            vehicle_plate=vehicle_plate,
+            vehicle_color=vehicle_color,
+            capacity=capacity
+        )
+
+        if success:
+            # Get updated user data
+            user = get_user_by_id(current_user['user_id'])
             user.pop('password_hash', None)
-            return jsonify({'user': user}), 200
-        return jsonify({'error': 'User not found'}), 404
+            return jsonify({
+                'message': 'Profile updated successfully',
+                'user': user
+            }), 200
+        else:
+            return jsonify({'error': 'Failed to update profile'}), 400
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/auth/change-password', methods=['POST'])
+@token_required
+def change_password(current_user):
+    """Change user password."""
+    try:
+        data = request.get_json()
+        old_password = data.get('old_password')
+        new_password = data.get('new_password')
+
+        if not old_password or not new_password:
+            return jsonify({'error': 'Both old and new passwords are required'}), 400
+
+        if len(new_password) < 8:
+            return jsonify({'error': 'New password must be at least 8 characters long'}), 400
+
+        # Get user from database
+        user = get_user_by_id(current_user['user_id'])
+        
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Verify old password
+        if not verify_password(user['password_hash'], old_password):
+            return jsonify({'error': 'Current password is incorrect'}), 401
+
+        # Update password using the reset_password function with a temporary token
+        from werkzeug.security import generate_password_hash
+        from models import get_db_connection
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        new_password_hash = generate_password_hash(new_password)
+        cursor.execute(
+            'UPDATE users SET password_hash = %s WHERE id = %s',
+            (new_password_hash, current_user['user_id'])
+        )
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({'message': 'Password changed successfully'}), 200
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -332,6 +453,23 @@ def reset_password_endpoint():
         else:
             return jsonify({'error': 'Invalid or expired reset token'}), 400
 
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/user/<int:user_id>', methods=['GET'])
+@admin_required
+def get_user_by_id_admin(current_user, user_id):
+    """Get a specific user by ID (admin only)."""
+    try:
+        user = get_user_by_id(user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Remove password hash
+        user.pop('password_hash', None)
+        
+        return jsonify({'user': user}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

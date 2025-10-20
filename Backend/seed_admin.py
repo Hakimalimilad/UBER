@@ -3,7 +3,7 @@ Seed Admin Account - Creates unified admin user for production
 Run this once to create an admin account: python seed_admin.py
 """
 
-from models import create_user, get_user_by_email, mark_user_verified
+from models import create_user, get_user_by_email, mark_user_verified, approve_user
 import os
 from dotenv import load_dotenv
 
@@ -36,8 +36,9 @@ def seed_admin():
             user_type='admin'
         )
         
-        # Mark admin as verified to bypass email verification
+        # Mark admin as verified and approved to bypass email verification and approval process
         mark_user_verified(user_id)
+        approve_user(user_id)
 
         print("✅ Unified admin account created successfully!")
         print(f"   Email: {admin_email}")

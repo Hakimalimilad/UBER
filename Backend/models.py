@@ -52,6 +52,22 @@ def create_tables():
             reset_token VARCHAR(255),
             reset_token_expiry DATETIME,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+            -- Student specific fields
+            student_id VARCHAR(50),
+            pickup_location VARCHAR(255),
+            dropoff_location VARCHAR(255),
+            parent_name VARCHAR(255),
+            parent_phone VARCHAR(50),
+            emergency_contact VARCHAR(50),
+
+            -- Driver specific fields
+            license_number VARCHAR(50),
+            vehicle_type VARCHAR(50),
+            vehicle_model VARCHAR(100),
+            vehicle_plate VARCHAR(20),
+            capacity INT DEFAULT 4,
+
             INDEX idx_email (email),
             INDEX idx_verification_token (verification_token),
             INDEX idx_reset_token (reset_token),
@@ -326,6 +342,113 @@ def update_user_role(user_id, new_role):
     conn.close()
     
     return affected > 0
+
+
+def update_user_profile(user_id, full_name, email, phone, profile_picture=None, student_id=None, major=None, year=None, campus_location=None, pickup_location=None, dropoff_location=None, parent_name=None, parent_phone=None, emergency_contact=None, license_number=None, vehicle_type=None, vehicle_model=None, vehicle_plate=None, vehicle_color=None, capacity=None):
+    """Update user profile with all possible fields including profile picture."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Build dynamic update query based on user type and provided fields
+    update_fields = []
+    values = []
+
+    # Basic fields
+    if full_name is not None:
+        update_fields.append('full_name = %s')
+        values.append(full_name)
+
+    if email is not None:
+        update_fields.append('email = %s')
+        values.append(email)
+
+    if phone is not None:
+        update_fields.append('phone = %s')
+        values.append(phone)
+    
+    if profile_picture is not None:
+        update_fields.append('profile_picture = %s')
+        values.append(profile_picture)
+
+    # Student specific fields
+    if student_id is not None:
+        update_fields.append('student_id = %s')
+        values.append(student_id)
+    
+    if major is not None:
+        update_fields.append('major = %s')
+        values.append(major)
+    
+    if year is not None:
+        update_fields.append('year = %s')
+        values.append(year)
+    
+    if campus_location is not None:
+        update_fields.append('campus_location = %s')
+        values.append(campus_location)
+
+    if pickup_location is not None:
+        update_fields.append('pickup_location = %s')
+        values.append(pickup_location)
+
+    if dropoff_location is not None:
+        update_fields.append('dropoff_location = %s')
+        values.append(dropoff_location)
+
+    if parent_name is not None:
+        update_fields.append('parent_name = %s')
+        values.append(parent_name)
+
+    if parent_phone is not None:
+        update_fields.append('parent_phone = %s')
+        values.append(parent_phone)
+
+    if emergency_contact is not None:
+        update_fields.append('emergency_contact = %s')
+        values.append(emergency_contact)
+
+    # Driver specific fields
+    if license_number is not None:
+        update_fields.append('license_number = %s')
+        values.append(license_number)
+
+    if vehicle_type is not None:
+        update_fields.append('vehicle_type = %s')
+        values.append(vehicle_type)
+
+    if vehicle_model is not None:
+        update_fields.append('vehicle_model = %s')
+        values.append(vehicle_model)
+
+    if vehicle_plate is not None:
+        update_fields.append('vehicle_plate = %s')
+        values.append(vehicle_plate)
+    
+    if vehicle_color is not None:
+        update_fields.append('vehicle_color = %s')
+        values.append(vehicle_color)
+
+    if capacity is not None:
+        update_fields.append('capacity = %s')
+        values.append(capacity)
+
+    # Add user_id to values
+    values.append(user_id)
+
+    if update_fields:
+        query = f'UPDATE users SET {", ".join(update_fields)} WHERE id = %s'
+        cursor.execute(query, values)
+
+        conn.commit()
+        affected = cursor.rowcount
+        cursor.close()
+        conn.close()
+
+        return affected > 0
+
+    cursor.close()
+    conn.close()
+    return False
 
 
 if __name__ == '__main__':
