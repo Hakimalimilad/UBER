@@ -1,11 +1,11 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Layout from '../../../components/MainLayout';
-import Card from '../../../components/Card';
-import RideRequestForm from '../../../components/RideRequestForm';
-import { MapPin, Clock, Car, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import Layout from "../../../components/MainLayout";
+import Card from "../../../components/Card";
+import RideRequestForm from "../../../components/RideRequestForm";
+import { MapPin, Clock, Car, CheckCircle } from "lucide-react";
 
 export default function StudentRequestRide() {
   const router = useRouter();
@@ -14,28 +14,40 @@ export default function StudentRequestRide() {
   const [requestSuccess, setRequestSuccess] = useState(false);
 
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
     setCurrentUser(user);
     setLoading(false);
   }, []);
 
   const handleRideRequest = async (rideData) => {
     try {
-      // Here you would typically make an API call to submit the ride request
-      console.log('Ride request submitted:', rideData);
+      const response = await fetch(
+        "http://localhost:5000/api/student/request-ride",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          body: JSON.stringify(rideData),
+        }
+      );
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const result = await response.json();
 
-      setRequestSuccess(true);
-
-      // Redirect to rides page after a delay
-      setTimeout(() => {
-        router.push('/student/rides');
-      }, 2000);
-
+      if (response.ok) {
+        setRequestSuccess(true);
+        // Redirect to rides page after a delay
+        setTimeout(() => {
+          router.push("/student/rides");
+        }, 2000);
+      } else {
+        console.error("Error requesting ride:", result.error);
+        alert(result.error || "Failed to request ride");
+      }
     } catch (error) {
-      console.error('Error submitting ride request:', error);
+      console.error("Error submitting ride request:", error);
+      alert("Network error. Please try again.");
     }
   };
 
@@ -55,9 +67,12 @@ export default function StudentRequestRide() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-4">Ride Requested Successfully!</h2>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">
+              Ride Requested Successfully!
+            </h2>
             <p className="text-gray-600 mb-6">
-              Your ride request has been submitted. You'll be notified when a driver accepts your request.
+              Your ride request has been submitted. You'll be notified when a
+              driver accepts your request.
             </p>
             <p className="text-sm text-gray-500">
               Estimated pickup time will be sent to your email
@@ -92,8 +107,12 @@ export default function StudentRequestRide() {
                 <Car className="w-5 h-5 text-indigo-600" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">Ride Request Form</h2>
-                <p className="text-gray-600">Please provide your trip details</p>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Ride Request Form
+                </h2>
+                <p className="text-gray-600">
+                  Please provide your trip details
+                </p>
               </div>
             </div>
 
@@ -104,11 +123,21 @@ export default function StudentRequestRide() {
         {/* Back Button */}
         <div className="mt-8 text-center">
           <button
-            onClick={() => router.push('/student/dashboard')}
+            onClick={() => router.push("/student/dashboard")}
             className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
           >
-            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            <svg
+              className="w-5 h-5 mr-2"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+              />
             </svg>
             Back to Dashboard
           </button>

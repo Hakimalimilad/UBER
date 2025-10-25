@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
+import { useState } from "react";
 
 interface VehicleFormProps {
   vehicle?: any;
@@ -8,15 +8,28 @@ interface VehicleFormProps {
   loading?: boolean;
 }
 
-const VehicleForm = ({ vehicle, onSubmit, loading = false }: VehicleFormProps) => {
+const VehicleForm = ({
+  vehicle,
+  onSubmit,
+  loading = false,
+}: VehicleFormProps) => {
   const [formData, setFormData] = useState({
-    vehicle_type: vehicle?.vehicle_type || 'Sedan',
+    vehicle_type: vehicle?.vehicle_type || "Sedan",
     seats: vehicle?.seats || 4,
-    plate: vehicle?.plate || '',
-    description: vehicle?.description || ''
+    plate: vehicle?.plate || "",
+    description: vehicle?.description || "",
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  // shared input class for consistent styling and strong contrast
+  const inputClass =
+    "w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 placeholder-gray-400 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition";
+
+  const selectClass =
+    "w-full px-3 py-2 border border-gray-300 bg-white text-gray-900 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none appearance-none transition";
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
@@ -28,12 +41,14 @@ const VehicleForm = ({ vehicle, onSubmit, loading = false }: VehicleFormProps) =
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Type</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Vehicle Type
+        </label>
         <select
           name="vehicle_type"
           value={formData.vehicle_type}
           onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className={selectClass}
         >
           <option value="Sedan">Sedan</option>
           <option value="SUV">SUV</option>
@@ -43,7 +58,9 @@ const VehicleForm = ({ vehicle, onSubmit, loading = false }: VehicleFormProps) =
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Seats</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Seats
+        </label>
         <input
           type="number"
           name="seats"
@@ -51,31 +68,35 @@ const VehicleForm = ({ vehicle, onSubmit, loading = false }: VehicleFormProps) =
           onChange={handleChange}
           min="1"
           max="20"
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className={inputClass}
           required
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">License Plate</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          License Plate
+        </label>
         <input
           type="text"
           name="plate"
           value={formData.plate}
           onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className={inputClass}
           required
         />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Description
+        </label>
         <input
           type="text"
           name="description"
           value={formData.description}
           onChange={handleChange}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+          className={inputClass}
         />
       </div>
 
@@ -84,7 +105,7 @@ const VehicleForm = ({ vehicle, onSubmit, loading = false }: VehicleFormProps) =
         disabled={loading}
         className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400"
       >
-        {loading ? 'Saving...' : 'Save Vehicle'}
+        {loading ? "Saving..." : "Save Vehicle"}
       </button>
     </form>
   );

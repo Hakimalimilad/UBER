@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import MainLayout from '../../components/MainLayout';
-import { Users, Car, Clock, CheckCircle, TrendingUp, Activity, DollarSign, AlertCircle } from 'lucide-react';
+import { Users, Car, Clock, CheckCircle, TrendingUp, Activity } from 'lucide-react';
 
 interface DashboardStats {
   totalUsers: number;
@@ -37,7 +37,7 @@ export default function AdminDashboard() {
   const fetchDashboardStats = async () => {
     try {
       const [usersRes, pendingRes] = await Promise.all([
-        fetch('http://localhost:5000/api/admin/all-users', {
+        fetch('http://localhost:5000/api/admin/users', {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         }),
         fetch('http://localhost:5000/api/admin/pending-users', {
@@ -84,8 +84,13 @@ export default function AdminDashboard() {
       return;
     }
 
-    fetchDashboardStats();
-    setLoading(false);
+    const loadData = async () => {
+      setLoading(true);
+      await fetchDashboardStats();
+      setLoading(false);
+    };
+
+    loadData();
   }, [router]);
 
   if (loading) {
@@ -209,37 +214,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Quick Actions */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button
-              onClick={() => router.push('/admin/approvals')}
-              className="flex items-center justify-center px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-lg hover:bg-yellow-100 transition-colors"
-            >
-              <Clock className="h-5 w-5 text-yellow-600 mr-2" />
-              <span className="text-sm font-medium text-yellow-900">
-                Review Approvals ({stats.pendingApprovals})
-              </span>
-            </button>
-
-            <button
-              onClick={() => router.push('/admin/users')}
-              className="flex items-center justify-center px-4 py-3 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
-            >
-              <Users className="h-5 w-5 text-blue-600 mr-2" />
-              <span className="text-sm font-medium text-blue-900">Manage Users</span>
-            </button>
-
-            <button
-              onClick={() => router.push('/admin/rides')}
-              className="flex items-center justify-center px-4 py-3 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
-            >
-              <Car className="h-5 w-5 text-green-600 mr-2" />
-              <span className="text-sm font-medium text-green-900">View Rides</span>
-            </button>
-          </div>
-        </div>
       </div>
     </MainLayout>
   );

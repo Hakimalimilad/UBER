@@ -14,18 +14,12 @@ export default function StudentDashboard() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updateMessage, setUpdateMessage] = useState('');
-
-  // Mock data
-  const [stats] = useState({
-    activeRides: 2,
-    pastRides: 5,
-    totalSpent: 25
+  const [stats, setStats] = useState({
+    activeRides: 0,
+    pastRides: 0,
+    totalSpent: 0
   });
-
-  const [myRides] = useState([
-    { id: 1, route: 'Campus to Downtown', driver: 'John Driver', status: 'Ongoing', date: '2024-10-15' },
-    { id: 2, route: 'Library to Dorms', driver: 'Sarah Driver', status: 'Completed', date: '2024-10-14' }
-  ]);
+  const [myRides, setMyRides] = useState([]);
 
   const tableColumns = [
     { key: 'route', label: 'Route', sortable: true },
@@ -34,11 +28,43 @@ export default function StudentDashboard() {
     { key: 'date', label: 'Date', sortable: true }
   ];
 
+  const fetchDashboardData = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/student/dashboard', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setStats({
+          activeRides: data.stats.active_rides || 0,
+          pastRides: data.stats.completed_rides || 0,
+          totalSpent: data.stats.total_spent || 0
+        });
+        setMyRides(data.recent_rides);
+        setCurrentUser(data.user);
+      } else {
+        console.error('Failed to fetch dashboard data');
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    // Simulate loading user data
+    const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    setCurrentUser(user);
-    setLoading(false);
+    
+    if (!token || user.user_type !== 'student') {
+      window.location.href = '/';
+      return;
+    }
+
+    fetchDashboardData();
   }, []);
 
   const handleProfileUpdate = async (data) => {

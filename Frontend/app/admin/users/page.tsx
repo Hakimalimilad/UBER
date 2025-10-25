@@ -1,3 +1,3 @@
-'use client';
+"use client";
 
-export { default } from '../users';
+export { default } from "../users";

@@ -9,34 +9,41 @@ export default function DriverDashboard() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAvailable, setIsAvailable] = useState(true);
-
-  // Mock data for demonstration
-  const [myRides] = useState([
-    {
-      id: 1,
-      student: 'Alice Student',
-      route: 'Main Campus → Downtown',
-      time: '08:00 AM',
-      date: '2024-10-15',
-      status: 'Confirmed',
-      passengers: 2
-    },
-    {
-      id: 2,
-      student: 'Bob Student',
-      route: 'Main Campus → Downtown',
-      time: '08:00 AM',
-      date: '2024-10-15',
-      status: 'Confirmed',
-      passengers: 1
-    }
-  ]);
-
-  const [earnings] = useState({
-    today: 15,
-    week: 85,
-    month: 320
+  const [myRides, setMyRides] = useState([]);
+  const [earnings, setEarnings] = useState({
+    today: 0,
+    week: 0,
+    month: 0
   });
+  const [performance, setPerformance] = useState({
+    total_rides: 0,
+    rating: 0,
+    completion_rate: 0
+  });
+
+  const fetchDashboardData = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/driver/dashboard', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setEarnings(data.earnings);
+        setPerformance(data.performance);
+        setMyRides(data.today_rides);
+        setCurrentUser(data.user);
+      } else {
+        console.error('Failed to fetch dashboard data');
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -47,8 +54,7 @@ export default function DriverDashboard() {
       return;
     }
 
-    setCurrentUser(user);
-    setLoading(false);
+    fetchDashboardData();
   }, [router]);
 
   const handleLogout = () => {
@@ -213,12 +219,12 @@ export default function DriverDashboard() {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-600">Total Rides:</span>
-                <span className="font-medium">47</span>
+                <span className="font-medium">{performance.total_rides}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Rating:</span>
                 <span className="font-medium flex items-center">
-                  4.8
+                  {performance.rating}
                   <svg className="w-4 h-4 ml-1 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
                   </svg>
@@ -226,7 +232,7 @@ export default function DriverDashboard() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Completion Rate:</span>
-                <span className="font-medium">98%</span>
+                <span className="font-medium">{performance.completion_rate}%</span>
               </div>
               <button className="w-full mt-4 px-4 py-2 border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors">
                 View Full Stats

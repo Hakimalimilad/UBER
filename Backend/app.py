@@ -13,6 +13,12 @@ from models import (create_user, get_user_by_email, get_user_by_id, verify_passw
                     generate_verification_token, save_verification_token, verify_email_token,
                     save_reset_token, verify_reset_token, reset_password, update_user_profile)
 from email_service import send_verification_email, send_password_reset_email, send_approval_email
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from ride_models import (create_ride, get_available_drivers, accept_ride, 
+                        get_student_rides, get_driver_rides, update_ride_status, 
+                        get_pending_rides, get_ride_by_id)
 import mysql.connector
 
 
@@ -587,6 +593,114 @@ def get_pending_users_endpoint(current_user):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/student/dashboard', methods=['GET'])
+@token_required
+def get_student_dashboard(current_user):
+    """Get student dashboard data."""
+    try:
+        if current_user['user_type'] != 'student':
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Get user's rides (mock data for now)
+        rides = [
+            {
+                'id': 1,
+                'route': 'Campus to Downtown',
+                'driver': 'John Driver',
+                'status': 'Ongoing',
+                'date': '2024-10-15',
+                'pickup_time': '08:00 AM',
+                'dropoff_time': '08:30 AM'
+            },
+            {
+                'id': 2,
+                'route': 'Library to Dorms',
+                'driver': 'Sarah Driver',
+                'status': 'Completed',
+                'date': '2024-10-14',
+                'pickup_time': '17:00 PM',
+                'dropoff_time': '17:25 PM'
+            }
+        ]
+        
+        # Calculate stats
+        active_rides = len([r for r in rides if r['status'] == 'Ongoing'])
+        completed_rides = len([r for r in rides if r['status'] == 'Completed'])
+        total_spent = completed_rides * 5  # Mock calculation
+        
+        return jsonify({
+            'stats': {
+                'active_rides': active_rides,
+                'completed_rides': completed_rides,
+                'total_spent': total_spent
+            },
+            'recent_rides': rides[:5],
+            'user': current_user
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/driver/dashboard', methods=['GET'])
+@token_required
+def get_driver_dashboard(current_user):
+    """Get driver dashboard data."""
+    try:
+        if current_user['user_type'] != 'driver':
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Get driver's rides (mock data for now)
+        rides = [
+            {
+                'id': 1,
+                'student': 'Alice Student',
+                'route': 'Main Campus → Downtown',
+                'time': '08:00 AM',
+                'date': '2024-10-15',
+                'status': 'Confirmed',
+                'passengers': 2,
+                'pickup_location': 'Main Campus',
+                'dropoff_location': 'Downtown'
+            },
+            {
+                'id': 2,
+                'student': 'Bob Student',
+                'route': 'Main Campus → Downtown',
+                'time': '08:00 AM',
+                'date': '2024-10-15',
+                'status': 'Confirmed',
+                'passengers': 1,
+                'pickup_location': 'Main Campus',
+                'dropoff_location': 'Downtown'
+            }
+        ]
+        
+        # Calculate earnings (mock data)
+        earnings = {
+            'today': 15,
+            'week': 85,
+            'month': 320
+        }
+        
+        # Driver performance stats
+        performance = {
+            'total_rides': 47,
+            'rating': 4.8,
+            'completion_rate': 98
+        }
+        
+        return jsonify({
+            'earnings': earnings,
+            'performance': performance,
+            'today_rides': rides,
+            'user': current_user
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/admin/approve-user/<int:user_id>', methods=['POST'])
 @admin_required
 def approve_user_endpoint(current_user, user_id):
@@ -646,14 +760,255 @@ def update_role(current_user, user_id):
         return jsonify({'error': str(e)}), 500
 
 
+# ============================================
+# EMAIL FUNCTIONS FOR RIDES
+# ============================================
+
+def send_ride_notification_email(driver_email, driver_name, student_name, pickup_location, dropoff_location, pickup_time):
+    """Send ride notification email to driver."""
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = os.getenv('MAIL_USERNAME')
+        msg['To'] = driver_email
+        msg['Subject'] = f"New Ride Request - {pickup_location} to {dropoff_location}"
+        
+        body = f"""
+        Hello {driver_name},
+        
+        A new ride request is available:
+        
+        Student: {student_name}
+        From: {pickup_location}
+        To: {dropoff_location}
+        Time: {pickup_time}
+        
+        Please log in to your driver dashboard to accept this ride.
+        
+        Best regards,
+        University Transportation Team
+        """
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP(os.getenv('MAIL_SERVER'), int(os.getenv('MAIL_PORT')))
+        server.starttls()
+        server.login(os.getenv('MAIL_USERNAME'), os.getenv('MAIL_PASSWORD'))
+        text = msg.as_string()
+        server.sendmail(os.getenv('MAIL_USERNAME'), driver_email, text)
+        server.quit()
+        
+        return True
+    except Exception as e:
+        print(f"Error sending ride notification email: {e}")
+        return False
+
+def send_ride_accepted_email(student_email, student_name, driver_name, driver_phone, pickup_location, dropoff_location):
+    """Send ride accepted email to student."""
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = os.getenv('MAIL_USERNAME')
+        msg['To'] = student_email
+        msg['Subject'] = f"Ride Accepted - {pickup_location} to {dropoff_location}"
+        
+        body = f"""
+        Hello {student_name},
+        
+        Great news! Your ride request has been accepted.
+        
+        Driver: {driver_name}
+        Phone: {driver_phone}
+        From: {pickup_location}
+        To: {dropoff_location}
+        
+        Your driver will contact you shortly for pickup details.
+        
+        Best regards,
+        University Transportation Team
+        """
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP(os.getenv('MAIL_SERVER'), int(os.getenv('MAIL_PORT')))
+        server.starttls()
+        server.login(os.getenv('MAIL_USERNAME'), os.getenv('MAIL_PASSWORD'))
+        text = msg.as_string()
+        server.sendmail(os.getenv('MAIL_USERNAME'), student_email, text)
+        server.quit()
+        
+        return True
+    except Exception as e:
+        print(f"Error sending ride accepted email: {e}")
+        return False
+
+# ============================================
+# RIDE MANAGEMENT ENDPOINTS
+# ============================================
+
+@app.route('/api/student/request-ride', methods=['POST'])
+@token_required
+def request_ride(current_user):
+    """Student requests a ride."""
+    try:
+        if current_user['user_type'] != 'student':
+            return jsonify({'error': 'Access denied'}), 403
+        
+        data = request.get_json()
+        pickup_location = data.get('pickup_location')
+        dropoff_location = data.get('dropoff_location')
+        pickup_time = data.get('pickup_time')
+        notes = data.get('notes', '')
+        
+        if not all([pickup_location, dropoff_location, pickup_time]):
+            return jsonify({'error': 'Missing required fields'}), 400
+        
+        # Create ride
+        ride_id = create_ride(
+            student_id=current_user['user_id'],
+            pickup_location=pickup_location,
+            dropoff_location=dropoff_location,
+            pickup_time=pickup_time,
+            notes=notes
+        )
+        
+        # Get available drivers for email notifications
+        available_drivers = get_available_drivers()
+        
+        # Send email notifications to drivers (using existing email system)
+        emails_sent = 0
+        for driver in available_drivers:
+            try:
+                # Use your existing email service
+                send_ride_notification_email(
+                    driver['email'],
+                    driver['full_name'],
+                    current_user.get('full_name', 'Student'),
+                    pickup_location,
+                    dropoff_location,
+                    pickup_time
+                )
+                emails_sent += 1
+            except Exception as e:
+                print(f"Failed to send email to {driver['email']}: {e}")
+        
+        return jsonify({
+            'message': 'Ride request sent successfully',
+            'ride_id': ride_id,
+            'drivers_notified': emails_sent
+        }), 201
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/driver/available-rides', methods=['GET'])
+@token_required
+def get_available_rides(current_user):
+    """Get available rides for driver."""
+    try:
+        if current_user['user_type'] != 'driver':
+            return jsonify({'error': 'Access denied'}), 403
+        
+        rides = get_pending_rides()
+        return jsonify({'rides': rides}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/driver/accept-ride/<int:ride_id>', methods=['POST'])
+@token_required
+def accept_ride_endpoint(current_user, ride_id):
+    """Driver accepts a ride."""
+    try:
+        if current_user['user_type'] != 'driver':
+            return jsonify({'error': 'Access denied'}), 403
+        
+        success = accept_ride(ride_id, current_user['user_id'])
+        
+        if success:
+            # Get ride details for email notification
+            ride = get_ride_by_id(ride_id)
+            if ride:
+                # Send email to student
+                send_ride_accepted_email(
+                    ride['student_email'],
+                    ride['student_name'],
+                    current_user.get('full_name', 'Driver'),
+                    current_user.get('phone', 'N/A'),
+                    ride['pickup_location'],
+                    ride['dropoff_location']
+                )
+            
+            return jsonify({'message': 'Ride accepted successfully'}), 200
+        else:
+            return jsonify({'error': 'Failed to accept ride'}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/student/my-rides', methods=['GET'])
+@token_required
+def get_my_rides_student(current_user):
+    """Get student's rides."""
+    try:
+        if current_user['user_type'] != 'student':
+            return jsonify({'error': 'Access denied'}), 403
+        
+        rides = get_student_rides(current_user['user_id'])
+        return jsonify({'rides': rides}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/driver/my-rides', methods=['GET'])
+@token_required
+def get_my_rides_driver(current_user):
+    """Get driver's rides."""
+    try:
+        if current_user['user_type'] != 'driver':
+            return jsonify({'error': 'Access denied'}), 403
+        
+        rides = get_driver_rides(current_user['user_id'])
+        return jsonify({'rides': rides}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/ride/<int:ride_id>/status', methods=['PUT'])
+@token_required
+def update_ride_status_endpoint(current_user, ride_id):
+    """Update ride status."""
+    try:
+        data = request.get_json()
+        status = data.get('status')
+        
+        if status not in ['in_progress', 'completed', 'cancelled']:
+            return jsonify({'error': 'Invalid status'}), 400
+        
+        success = update_ride_status(ride_id, status)
+        
+        if success:
+            return jsonify({'message': 'Ride status updated successfully'}), 200
+        else:
+            return jsonify({'error': 'Failed to update ride status'}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     from models import create_tables
+    from ride_models import create_ride_tables
     
     print("🚀 Starting Student Transportation Platform...")
     
     # Create tables if they don't exist
     try:
         create_tables()
+        create_ride_tables()
     except:
         pass
     
