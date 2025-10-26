@@ -33,7 +33,7 @@ def get_db_connection():
 
 
 def create_tables():
-    """Create users table only """
+    """Create users and rides tables """
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -75,10 +75,32 @@ def create_tables():
         )
     ''')
 
+    # Rides table for ride requests and assignments
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS rides (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            student_id INT NOT NULL,
+            driver_id INT NULL,  -- NULL until accepted
+            pickup_location VARCHAR(255) NOT NULL,
+            dropoff_location VARCHAR(255) NOT NULL,
+            pickup_time DATETIME NOT NULL,
+            status ENUM('pending', 'accepted', 'in_progress', 'completed', 'cancelled') DEFAULT 'pending',
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (driver_id) REFERENCES users(id) ON DELETE SET NULL,
+            INDEX idx_student (student_id),
+            INDEX idx_driver (driver_id),
+            INDEX idx_status (status),
+            INDEX idx_pickup_time (pickup_time)
+        )
+    ''')
+
     conn.commit()
     cursor.close()
     conn.close()
-    print("✅ Users table created with approval system!")
+    print("✅ Users and rides tables created!")
     
 
 
@@ -449,6 +471,188 @@ def update_user_profile(user_id, full_name, email, phone, profile_picture=None, 
     cursor.close()
     conn.close()
     return False
+
+
+# ============================================
+# RIDE FUNCTIONS - For ride management
+# ============================================
+
+def create_ride(student_id, pickup_location, dropoff_location, pickup_time, notes=None):
+    """Create a new ride request."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        INSERT INTO rides (student_id, pickup_location, dropoff_location, pickup_time, notes, status)
+        VALUES (%s, %s, %s, %s, %s, 'pending')
+    ''', (student_id, pickup_location, dropoff_location, pickup_time, notes))
+    
+    conn.commit()
+    ride_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    
+    return ride_id
+
+
+def get_available_drivers():
+    """Get all approved drivers."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute('''
+        SELECT id, full_name, email, phone, vehicle_type, vehicle_model, vehicle_plate, capacity
+        FROM users 
+        WHERE user_type = 'driver' AND is_verified = TRUE AND is_approved = TRUE
+    ''')
+    
+    drivers = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    return drivers
+
+
+def accept_ride(ride_id, driver_id):
+    """Accept a ride by assigning it to a driver."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE rides 
+        SET driver_id = %s, status = 'accepted', updated_at = CURRENT_TIMESTAMP
+        WHERE id = %s AND status = 'pending'
+    ''', (driver_id, ride_id))
+    
+    conn.commit()
+    affected = cursor.rowcount
+    cursor.close()
+    conn.close()
+    
+    return affected > 0
+
+
+def get_student_rides(student_id):
+    """Get all rides for a specific student."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute('''
+        SELECT r.*, u.full_name as driver_name, u.phone as driver_phone
+        FROM rides r
+        LEFT JOIN users u ON r.driver_id = u.id
+        WHERE r.student_id = %s
+        ORDER BY r.created_at DESC
+    ''', (student_id,))
+    
+    rides = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    return rides
+
+
+def get_driver_rides(driver_id):
+    """Get all rides for a specific driver."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute('''
+        SELECT r.*, u.full_name as student_name, u.phone as student_phone
+        FROM rides r
+        LEFT JOIN users u ON r.student_id = u.id
+        WHERE r.driver_id = %s
+        ORDER BY r.created_at DESC
+    ''', (driver_id,))
+    
+    rides = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    return rides
+
+
+def update_ride_status(ride_id, status):
+    """Update the status of a ride."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        UPDATE rides 
+        SET status = %s, updated_at = CURRENT_TIMESTAMP
+        WHERE id = %s
+    ''', (status, ride_id))
+    
+    conn.commit()
+    affected = cursor.rowcount
+    cursor.close()
+    conn.close()
+    
+    return affected > 0
+
+
+def get_pending_rides():
+    """Get all pending rides for drivers to see."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute('''
+        SELECT r.*, u.full_name as student_name, u.phone as student_phone
+        FROM rides r
+        JOIN users u ON r.student_id = u.id
+        WHERE r.status = 'pending'
+        ORDER BY r.created_at ASC
+    ''')
+    
+    rides = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    return rides
+
+
+def get_ride_by_id(ride_id):
+    """Get a specific ride by ID."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute('''
+        SELECT r.*, 
+               u1.full_name as student_name, u1.phone as student_phone,
+               u2.full_name as driver_name, u2.phone as driver_phone
+        FROM rides r
+        LEFT JOIN users u1 ON r.student_id = u1.id
+        LEFT JOIN users u2 ON r.driver_id = u2.id
+        WHERE r.id = %s
+    ''', (ride_id,))
+    
+    ride = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    return ride
+
+
+def get_all_rides():
+    """Get all rides (for admin)."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute('''
+        SELECT r.*, 
+               u1.full_name as student_name, u1.phone as student_phone,
+               u2.full_name as driver_name, u2.phone as driver_phone
+        FROM rides r
+        LEFT JOIN users u1 ON r.student_id = u1.id
+        LEFT JOIN users u2 ON r.driver_id = u2.id
+        ORDER BY r.created_at DESC
+    ''')
+    
+    rides = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    return rides
 
 
 if __name__ == '__main__':

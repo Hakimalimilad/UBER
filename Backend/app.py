@@ -16,9 +16,9 @@ from email_service import send_verification_email, send_password_reset_email, se
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from ride_models import (create_ride, get_available_drivers, accept_ride, 
-                        get_student_rides, get_driver_rides, update_ride_status, 
-                        get_pending_rides, get_ride_by_id)
+from models import (create_ride, get_available_drivers, accept_ride, 
+                   get_student_rides, get_driver_rides, update_ride_status, 
+                   get_pending_rides, get_ride_by_id, get_all_rides)
 import mysql.connector
 
 
@@ -755,6 +755,18 @@ def update_role(current_user, user_id):
         if success:
             return jsonify({'message': 'User role updated successfully'}), 200
         return jsonify({'error': 'User not found'}), 404
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/rides', methods=['GET'])
+@admin_required
+def get_all_rides_admin(current_user):
+    """Get all rides (admin only)."""
+    try:
+        rides = get_all_rides()
+        return jsonify({'rides': rides}), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
