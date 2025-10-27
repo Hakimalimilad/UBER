@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import MainLayout from '../../components/MainLayout';
+import { CheckCircle, Car, Clock } from 'lucide-react';
 
 export default function DriverDashboard() {
   const router = useRouter();
@@ -48,7 +49,7 @@ export default function DriverDashboard() {
   useEffect(() => {
     const token = localStorage.getItem('token');
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    
+
     if (!token || user.user_type !== 'driver') {
       router.push('/');
       return;
@@ -66,10 +67,6 @@ export default function DriverDashboard() {
   const toggleAvailability = () => {
     setIsAvailable(!isAvailable);
     // In real implementation, this would update the backend
-  };
-
-  const handleCompleteRide = (rideId) => {
-    alert(`Completing ride #${rideId} - This will be implemented with backend integration`);
   };
 
   if (loading) {
@@ -174,15 +171,26 @@ export default function DriverDashboard() {
                     </div>
 
                     <div className="flex flex-col items-end gap-2">
-                      <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                        {ride.status}
+                      <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border-2 ${
+                        ride.status === "completed"
+                          ? "bg-green-100 text-green-700 border-green-300"
+                          : ride.status === "accepted" || ride.status === "in_progress"
+                          ? "bg-blue-100 text-blue-700 border-blue-300"
+                          : ride.status === "cancelled"
+                          ? "bg-red-100 text-red-700 border-red-300"
+                          : "bg-yellow-100 text-yellow-700 border-yellow-300"
+                      }`}>
+                        {ride.status === "completed" ? (
+                          <CheckCircle className="w-4 h-4" />
+                        ) : ride.status === "accepted" || ride.status === "in_progress" ? (
+                          <Car className="w-4 h-4 animate-pulse" />
+                        ) : ride.status === "cancelled" ? (
+                          <Clock className="w-4 h-4" />
+                        ) : (
+                          <Clock className="w-4 h-4" />
+                        )}
+                        {ride.status.charAt(0).toUpperCase() + ride.status.slice(1)}
                       </span>
-                      <button
-                        onClick={() => handleCompleteRide(ride.id)}
-                        className="px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors"
-                      >
-                        Complete Ride
-                      </button>
                     </div>
                   </div>
                 </div>
@@ -198,17 +206,20 @@ export default function DriverDashboard() {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-600">Vehicle Type:</span>
-                <span className="font-medium">Sedan</span>
+                <span className="font-medium text-gray-900">{currentUser?.vehicle_type || 'Not set'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">License Plate:</span>
-                <span className="font-medium">ABC-1234</span>
+                <span className="font-medium text-gray-900">{currentUser?.vehicle_plate || 'Not set'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Capacity:</span>
-                <span className="font-medium">4 passengers</span>
+                <span className="font-medium text-gray-900">{currentUser?.capacity || 4} passengers</span>
               </div>
-              <button className="w-full mt-4 px-4 py-2 border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors">
+              <button
+                onClick={() => router.push('/driver/vehicle')}
+                className="w-full mt-4 px-4 py-2 border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
+              >
                 Update Vehicle Info
               </button>
             </div>
@@ -219,11 +230,11 @@ export default function DriverDashboard() {
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-600">Total Rides:</span>
-                <span className="font-medium">{performance.total_rides}</span>
+                <span className="font-medium text-gray-900">{performance.total_rides}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Rating:</span>
-                <span className="font-medium flex items-center">
+                <span className="font-medium text-gray-900 flex items-center">
                   {performance.rating}
                   <svg className="w-4 h-4 ml-1 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
                     <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
@@ -232,9 +243,12 @@ export default function DriverDashboard() {
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-600">Completion Rate:</span>
-                <span className="font-medium">{performance.completion_rate}%</span>
+                <span className="font-medium text-gray-900">{performance.completion_rate}%</span>
               </div>
-              <button className="w-full mt-4 px-4 py-2 border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors">
+              <button
+                onClick={() => router.push('/driver/rides')}
+                className="w-full mt-4 px-4 py-2 border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-colors"
+              >
                 View Full Stats
               </button>
             </div>

@@ -9,6 +9,8 @@ import jwt
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from functools import wraps
+from pytz import timezone
+import pytz
 from models import (create_user, get_user_by_email, get_user_by_id, verify_password, get_all_users, update_user_role,
                     generate_verification_token, save_verification_token, verify_email_token,
                     save_reset_token, verify_reset_token, reset_password, update_user_profile)
@@ -18,7 +20,11 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from models import (create_ride, get_available_drivers, accept_ride, 
                    get_student_rides, get_driver_rides, update_ride_status, 
-                   get_pending_rides, get_ride_by_id, get_all_rides)
+                   get_pending_rides, get_ride_by_id, get_all_rides,
+                   create_rating, get_driver_ratings, get_driver_average_rating,
+                   get_student_ratings_given, get_student_average_rating_given,
+                   get_ride_rating, can_rate_ride, get_ride_passengers,
+                   add_passenger_to_ride, get_available_drivers_with_stats)
 import mysql.connector
 
 
@@ -34,6 +40,32 @@ mydb = mysql.connector.connect(
     password=os.getenv('MYSQL_PASSWORD'),
     database=os.getenv('MYSQL_DATABASE')
 )
+
+def format_datetime(dt, format_type='full'):
+    """Format datetime consistently across the platform."""
+    if dt is None:
+        return None
+    
+    # Convert to UTC if timezone naive
+    if dt.tzinfo is None:
+        dt = pytz.UTC.localize(dt)
+    else:
+        dt = dt.astimezone(pytz.UTC)
+    
+    # Format based on type
+    if format_type == 'date':
+        return dt.strftime('%Y-%m-%d')
+    elif format_type == 'time':
+        return dt.strftime('%I:%M %p')
+    elif format_type == 'datetime':
+        return dt.strftime('%Y-%m-%d %I:%M %p')
+    elif format_type == 'full':
+        return dt.strftime('%Y-%m-%d %H:%M:%S')
+    elif format_type == 'display':
+        return dt.strftime('%b %d, %Y at %I:%M %p')
+    else:
+        return dt.isoformat()
+
 
 def generate_token(user_id, user_type):
     """Generate JWT token."""
@@ -197,12 +229,18 @@ def update_profile(current_user):
     try:
         data = request.get_json()
         
-        # Basic fields (all users)
-        full_name = data.get('full_name')
-        email = data.get('email')
+        # Get existing user data to handle partial updates
+        existing_user = get_user_by_id(current_user['user_id'])
+        if not existing_user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Basic fields (all users) - use existing values if not provided
+        full_name = data.get('full_name', existing_user.get('full_name'))
+        email = data.get('email', existing_user.get('email'))
         phone = data.get('phone')
         profile_picture = data.get('profilePicture')
 
+        # Ensure required fields are present (use existing if not provided in request)
         if not full_name or not email:
             return jsonify({'error': 'Full name and email are required'}), 400
 
@@ -538,41 +576,52 @@ def get_students(current_user):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/admin/drivers', methods=['GET'])
+@app.route('/api/admin/all-drivers', methods=['GET'])
 @admin_required
-def get_drivers(current_user):
-    """Get all drivers (admin only)."""
+def get_all_drivers_admin(current_user):
+    """Get all drivers with stats (admin only)."""
     try:
-        # For now, return users with driver role
-        # In a real app, you'd have a separate drivers table
+        from models import get_all_users
         users = get_all_users()
         drivers = [user for user in users if user.get('user_type') == 'driver']
 
-        # Add mock driver data for demonstration and map fields properly for frontend
+        # Add driver data and map fields properly for frontend
         for driver in drivers:
+            # Get real rating data for this driver
+            rating_stats = get_driver_average_rating(driver['id'])
+
             # Map user fields to driver fields expected by frontend
             driver['name'] = driver.get('full_name', 'Unknown Driver')
             driver['email'] = driver.get('email', '')
-            driver['license_number'] = f"DL{driver['id']:06d}"
-            driver['vehicle_type'] = 'Sedan'
-            driver['vehicle_model'] = 'Toyota Camry'
-            driver['vehicle_plate'] = f"ABC{driver['id']:03d}"
-            driver['capacity'] = 4
-            driver['is_active'] = True
+            driver['license_number'] = driver.get('license_number', f"DL{driver['id']:06d}")
+            driver['vehicle_type'] = driver.get('vehicle_type', 'Sedan')
+            driver['vehicle_model'] = driver.get('vehicle_model', 'Toyota Camry')
+            driver['vehicle_plate'] = driver.get('vehicle_plate', f"ABC{driver['id']:03d}")
+            driver['capacity'] = driver.get('capacity', 4)
+            driver['is_active'] = driver.get('is_approved', False)  # For now, use approval status as active
             driver['is_verified'] = driver.get('is_verified', False)
-            driver['rides_completed'] = 0
-            driver['rating'] = 4.5
+
+            # Get real ride count
+            driver_rides = get_driver_rides(driver['id'])
+            driver['rides_completed'] = len([r for r in driver_rides if r['status'] == 'completed'])
+
+            # Use real rating data
+            driver['rating'] = rating_stats['average_rating']
+            driver['total_ratings'] = rating_stats['total_ratings']
+
+        # Calculate statistics
+        statistics = {
+            'total_drivers': len(drivers),
+            'active_drivers': len([d for d in drivers if d.get('is_active', False)]),
+            'inactive_drivers': len([d for d in drivers if not d.get('is_active', False)]),
+            'verified_drivers': len([d for d in drivers if d.get('is_verified', False)])
+        }
 
         return jsonify({
             'drivers': drivers,
-            'statistics': {
-                'total_drivers': len(drivers),
-                'active_drivers': len([d for d in drivers if d.get('is_active', False)]),
-                'inactive_drivers': len([d for d in drivers if not d.get('is_active', False)]),
-                'verified_drivers': len([d for d in drivers if d.get('is_verified', False)])
-            },
-            'total': len(drivers)
+            'statistics': statistics
         }), 200
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -601,41 +650,44 @@ def get_student_dashboard(current_user):
         if current_user['user_type'] != 'student':
             return jsonify({'error': 'Access denied'}), 403
         
-        # Get user's rides (mock data for now)
-        rides = [
-            {
-                'id': 1,
-                'route': 'Campus to Downtown',
-                'driver': 'John Driver',
-                'status': 'Ongoing',
-                'date': '2024-10-15',
-                'pickup_time': '08:00 AM',
-                'dropoff_time': '08:30 AM'
-            },
-            {
-                'id': 2,
-                'route': 'Library to Dorms',
-                'driver': 'Sarah Driver',
-                'status': 'Completed',
-                'date': '2024-10-14',
-                'pickup_time': '17:00 PM',
-                'dropoff_time': '17:25 PM'
-            }
-        ]
+        # Get real rides from database
+        rides = get_student_rides(current_user['user_id'])
         
-        # Calculate stats
-        active_rides = len([r for r in rides if r['status'] == 'Ongoing'])
-        completed_rides = len([r for r in rides if r['status'] == 'Completed'])
-        total_spent = completed_rides * 5  # Mock calculation
+        # Format rides for frontend
+        formatted_rides = []
+        for ride in rides:
+            pickup = ride.get('pickup_time')
+            formatted_rides.append({
+                'id': ride['id'],
+                'route': f"{ride['pickup_location']} → {ride['dropoff_location']}",
+                'driver': ride.get('driver_name', 'Not assigned'),
+                'status': ride['status'],
+                'pickup_location': ride['pickup_location'],
+                'dropoff_location': ride['dropoff_location'],
+                'date': format_datetime(pickup, 'date') if pickup else '',
+                'pickup_time': format_datetime(pickup, 'time') if pickup else '',
+                'created_at': format_datetime(ride.get('created_at'), 'display') if ride.get('created_at') else ''
+            })
+        
+        # Calculate stats from real data
+        active_rides = len([r for r in rides if r['status'] in ['pending', 'accepted', 'in_progress']])
+        completed_rides = len([r for r in rides if r['status'] == 'completed'])
+        
+        # Get real average rating from ratings given by this student
+        rating_stats = get_student_average_rating_given(current_user['user_id'])
+        avg_rating = rating_stats['average_rating']
+        
+        # Get user details
+        user = get_user_by_id(current_user['user_id'])
         
         return jsonify({
             'stats': {
                 'active_rides': active_rides,
                 'completed_rides': completed_rides,
-                'total_spent': total_spent
+                'avg_rating': avg_rating
             },
-            'recent_rides': rides[:5],
-            'user': current_user
+            'recent_rides': formatted_rides[:5],
+            'user': user
         }), 200
         
     except Exception as e:
@@ -650,51 +702,67 @@ def get_driver_dashboard(current_user):
         if current_user['user_type'] != 'driver':
             return jsonify({'error': 'Access denied'}), 403
         
-        # Get driver's rides (mock data for now)
-        rides = [
-            {
-                'id': 1,
-                'student': 'Alice Student',
-                'route': 'Main Campus → Downtown',
-                'time': '08:00 AM',
-                'date': '2024-10-15',
-                'status': 'Confirmed',
-                'passengers': 2,
-                'pickup_location': 'Main Campus',
-                'dropoff_location': 'Downtown'
-            },
-            {
-                'id': 2,
-                'student': 'Bob Student',
-                'route': 'Main Campus → Downtown',
-                'time': '08:00 AM',
-                'date': '2024-10-15',
-                'status': 'Confirmed',
-                'passengers': 1,
-                'pickup_location': 'Main Campus',
-                'dropoff_location': 'Downtown'
-            }
-        ]
+        # Get real driver's rides from database
+        all_rides = get_driver_rides(current_user['user_id'])
         
-        # Calculate earnings (mock data)
+        # Filter today's rides and upcoming rides
+        from datetime import date, datetime
+        today = date.today()
+        today_rides = []
+        for r in all_rides:
+            if r.get('pickup_time'):
+                ride_date = r['pickup_time'].date() if hasattr(r['pickup_time'], 'date') else datetime.strptime(str(r['pickup_time']), '%Y-%m-%d %H:%M:%S').date()
+                # Include today and future rides
+                if ride_date >= today:
+                    today_rides.append(r)
+        
+        # Format rides for frontend
+        formatted_rides = []
+        for ride in today_rides:
+            pickup_time = ride.get('pickup_time')
+            formatted_rides.append({
+                'id': ride['id'],
+                'student': ride.get('student_name', 'Unknown Student'),
+                'route': f"{ride['pickup_location']} → {ride['dropoff_location']}",
+                'time': format_datetime(pickup_time, 'time') if pickup_time else '',
+                'date': format_datetime(pickup_time, 'date') if pickup_time else '',
+                'status': ride['status'],
+                'passengers': 1,
+                'pickup_location': ride['pickup_location'],
+                'dropoff_location': ride['dropoff_location']
+            })
+        
+        # Calculate performance from real data
+        total_rides = len(all_rides)
+        completed_rides = len([r for r in all_rides if r['status'] == 'completed'])
+        completion_rate = int((completed_rides / total_rides * 100)) if total_rides > 0 else 0
+        
+        # Mock earnings data (would calculate from actual ride data in production)
         earnings = {
-            'today': 15,
-            'week': 85,
-            'month': 320
+            'today': len(today_rides) * 5,
+            'week': total_rides * 5,
+            'month': total_rides * 5 * 4
         }
         
+        # Get real driver performance stats including rating
+        rating_stats = get_driver_average_rating(current_user['user_id'])
+
         # Driver performance stats
         performance = {
-            'total_rides': 47,
-            'rating': 4.8,
-            'completion_rate': 98
+            'total_rides': total_rides,
+            'rating': rating_stats['average_rating'],
+            'total_ratings': rating_stats['total_ratings'],
+            'completion_rate': completion_rate
         }
+        
+        # Get user details
+        user = get_user_by_id(current_user['user_id'])
         
         return jsonify({
             'earnings': earnings,
             'performance': performance,
-            'today_rides': rides,
-            'user': current_user
+            'today_rides': formatted_rides,
+            'user': user
         }), 200
         
     except Exception as e:
@@ -1011,16 +1079,189 @@ def update_ride_status_endpoint(current_user, ride_id):
         return jsonify({'error': str(e)}), 500
 
 
+# ============================================
+# RATING ENDPOINTS
+# ============================================
+
+@app.route('/api/ride/<int:ride_id>/rate', methods=['POST'])
+@token_required
+def rate_ride(current_user, ride_id):
+    """Rate a completed ride."""
+    try:
+        if current_user['user_type'] != 'student':
+            return jsonify({'error': 'Only students can rate rides'}), 403
+
+        data = request.get_json() or {}
+        rating = data.get('rating')
+        comment = data.get('comment', '')
+
+        # ensure rating is an int
+        try:
+            rating = int(rating)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Rating must be an integer between 1 and 5'}), 400
+
+        if rating < 1 or rating > 5:
+            return jsonify({'error': 'Rating must be between 1 and 5'}), 400
+
+        # Check if student can rate this ride
+        if not can_rate_ride(ride_id, current_user['user_id']):
+            return jsonify({'error': 'Cannot rate this ride'}), 400
+
+        # Get ride details to get driver_id
+        ride = get_ride_by_id(ride_id)
+        if not ride:
+            return jsonify({'error': 'Ride not found'}), 404
+
+        # Create rating
+        rating_id = create_rating(
+            ride_id=ride_id,
+            student_id=current_user['user_id'],
+            driver_id=ride['driver_id'],
+            rating=rating,
+            comment=comment
+        )
+
+        return jsonify({
+            'message': 'Rating submitted successfully',
+            'rating_id': rating_id
+        }), 201
+
+    except Exception as e:
+        app.logger.exception("Error in rate_ride")
+        return jsonify({'error': 'Internal server error'}), 500
+
+
+@app.route('/api/student/ratings', methods=['GET'])
+@token_required
+def get_student_ratings(current_user):
+    """Get all ratings given by a student."""
+    try:
+        if current_user['user_type'] != 'student':
+            return jsonify({'error': 'Access denied'}), 403
+        
+        ratings = get_student_ratings_given(current_user['user_id'])
+        rating_stats = get_student_average_rating_given(current_user['user_id'])
+        
+        return jsonify({
+            'ratings': ratings,
+            'stats': rating_stats
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/driver/<int:driver_id>/ratings', methods=['GET'])
+@admin_required
+def get_driver_ratings_admin(current_user, driver_id):
+    """Get all ratings and comments for a specific driver (admin only)."""
+    try:
+        ratings = get_driver_ratings(driver_id)
+        rating_stats = get_driver_average_rating(driver_id)
+
+        return jsonify({
+            'ratings': ratings,
+            'stats': rating_stats
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/ride/<int:ride_id>/rating', methods=['GET'])
+@token_required
+def get_ride_rating_endpoint(current_user, ride_id):
+    """Get rating for a specific ride."""
+    try:
+        rating = get_ride_rating(ride_id)
+        
+        if not rating:
+            return jsonify({'rating': None}), 200
+        
+        # Only allow access to the student who gave the rating, the driver, or admin
+        if (current_user['user_type'] != 'admin' and 
+            current_user['user_id'] not in [rating['student_id'], rating['driver_id']]):
+            return jsonify({'error': 'Access denied'}), 403
+        
+        return jsonify({'rating': rating}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/available-drivers', methods=['GET'])
+@token_required
+def get_available_drivers_endpoint(current_user):
+    """Get real-time available drivers for students."""
+    try:
+        drivers = get_available_drivers_with_stats()
+        
+        # Format driver data for frontend
+        formatted_drivers = []
+        for driver in drivers:
+            formatted_drivers.append({
+                'id': driver['id'],
+                'name': driver['full_name'],
+                'phone': driver.get('phone', 'N/A'),
+                'email': driver['email'],
+                'vehicle_type': driver.get('vehicle_type', 'Sedan'),
+                'vehicle_model': driver.get('vehicle_model', 'N/A'),
+                'vehicle_plate': driver.get('vehicle_plate', 'N/A'),
+                'capacity': driver.get('capacity', 4),
+                'total_rides': driver.get('total_rides', 0),
+                'rating': round(float(driver.get('avg_rating') or 0), 1),
+                'total_ratings': driver.get('total_ratings', 0),
+                'is_available': True  # Could be enhanced with driver status
+            })
+        
+        return jsonify({
+            'drivers': formatted_drivers,
+            'total': len(formatted_drivers)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/ride/<int:ride_id>/passengers', methods=['GET'])
+@token_required
+def get_ride_passengers_endpoint(current_user, ride_id):
+    """Get all passengers for a specific ride."""
+    try:
+        # Get ride to check access
+        ride = get_ride_by_id(ride_id)
+        if not ride:
+            return jsonify({'error': 'Ride not found'}), 404
+        
+        # Only driver, passengers, or admin can see passengers
+        if current_user['user_type'] != 'admin':
+            if current_user['user_type'] == 'driver' and ride['driver_id'] != current_user['user_id']:
+                return jsonify({'error': 'Access denied'}), 403
+            if current_user['user_type'] == 'student' and ride['student_id'] != current_user['user_id']:
+                return jsonify({'error': 'Access denied'}), 403
+        
+        passengers = get_ride_passengers(ride_id)
+        
+        return jsonify({
+            'passengers': passengers,
+            'total': len(passengers)
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     from models import create_tables
-    from ride_models import create_ride_tables
+    
     
     print("🚀 Starting Student Transportation Platform...")
     
     # Create tables if they don't exist
     try:
         create_tables()
-        create_ride_tables()
+        
     except:
         pass
     

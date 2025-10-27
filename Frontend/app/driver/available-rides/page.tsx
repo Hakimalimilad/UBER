@@ -30,6 +30,11 @@ export default function DriverAvailableRides() {
   const [messageType, setMessageType] = useState<"success" | "error">(
     "success"
   );
+  const [stats, setStats] = useState({
+    availableNow: 0,
+    totalToday: 0,
+    responseRate: 0,
+  });
 
   const fetchAvailableRides = async () => {
     try {
@@ -46,6 +51,51 @@ export default function DriverAvailableRides() {
       if (response.ok) {
         const data = await response.json();
         setAvailableRides(data.rides || []);
+
+        // Fetch driver's own rides for stats
+        const driverResponse = await fetch(
+          "http://localhost:5000/api/driver/my-rides",
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("token")}`,
+            },
+          }
+        );
+
+        if (driverResponse.ok) {
+          const driverData = await driverResponse.json();
+          const myRides = driverData.rides || [];
+
+          // Get today's date
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          // Calculate today's rides
+          const todayRides = myRides.filter((ride) => {
+            if (!ride.pickup_time) return false;
+            const rideDate = new Date(ride.pickup_time);
+            rideDate.setHours(0, 0, 0, 0);
+            return rideDate.getTime() === today.getTime();
+          });
+
+          // Calculate response rate (responded rides / total opportunities)
+          // Count all rides the driver has ever accepted (accepted, in_progress, completed)
+          const availableNowCount = data.rides?.length || 0;
+          const respondedRides = myRides.filter(
+            (r) => r.status === "accepted" || r.status === "in_progress" || r.status === "completed"
+          ).length;
+          const totalOpportunities = respondedRides + availableNowCount;
+          const responseRate =
+            totalOpportunities > 0
+              ? Math.round((respondedRides / totalOpportunities) * 100)
+              : 0;
+
+          setStats({
+            availableNow: data.rides?.length || 0,
+            totalToday: todayRides.length,
+            responseRate: responseRate,
+          });
+        }
       } else {
         console.error("Failed to fetch available rides");
         setMessage("Failed to load available rides");
@@ -190,7 +240,7 @@ export default function DriverAvailableRides() {
                     Available Now
                   </p>
                   <p className="text-2xl font-bold text-blue-900">
-                    {availableRides.length}
+                    {stats.availableNow}
                   </p>
                 </div>
               </div>
@@ -205,7 +255,9 @@ export default function DriverAvailableRides() {
                   <p className="text-sm font-medium text-green-600">
                     Total Today
                   </p>
-                  <p className="text-2xl font-bold text-green-900">0</p>
+                  <p className="text-2xl font-bold text-green-900">
+                    {stats.totalToday}
+                  </p>
                 </div>
               </div>
             </Card>
@@ -219,7 +271,9 @@ export default function DriverAvailableRides() {
                   <p className="text-sm font-medium text-purple-600">
                     Response Rate
                   </p>
-                  <p className="text-2xl font-bold text-purple-900">100%</p>
+                  <p className="text-2xl font-bold text-purple-900">
+                    {stats.responseRate}%
+                  </p>
                 </div>
               </div>
             </Card>

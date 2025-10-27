@@ -4,9 +4,8 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import MainLayout from "../../../components/MainLayout";
 import Card from "../../../components/Card";
-import Topbar from "../../../components/Topbar";
 import VehicleForm from "../../../components/VehicleForm";
-import { Car, Settings, AlertTriangle, CheckCircle } from "lucide-react";
+import { Car, Settings } from "lucide-react";
 
 export default function DriverVehicle() {
   const router = useRouter();
@@ -15,52 +14,110 @@ export default function DriverVehicle() {
   const [vehicleData, setVehicleData] = useState(null);
   const [updateMessage, setUpdateMessage] = useState("");
 
-  const fetchVehicleData = async () => {
-    try {
-      const response = await fetch("http://localhost:5000/api/driver/vehicle", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setVehicleData(data.vehicle);
-      } else {
-        console.error("Failed to fetch vehicle data");
-      }
-    } catch (error) {
-      console.error("Error fetching vehicle data:", error);
-    }
-  };
-
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
-    setCurrentUser(user);
+    const loadUserData = () => {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      setCurrentUser(user);
 
-    // Fetch vehicle data from API
-    fetchVehicleData();
+      // Set vehicle data from user data
+      if (user && Object.keys(user).length > 0) {
+        setVehicleData({
+          vehicle_type: user.vehicle_type || "Sedan",
+          seats: user.capacity || 4,
+          plate: user.vehicle_plate || "",
+          description: user.vehicle_model || "",
+          color: user.vehicle_color || "",
+          license_number: user.license_number || "",
+          make: user.vehicle_type || "Toyota",
+          model: user.vehicle_model || "Camry",
+          licensePlate: user.vehicle_plate || "NOT SET",
+          capacity: user.capacity || 4,
+          status: "active",
+        });
+      }
+    };
 
+    loadUserData();
+
+    // Listen for profile updates from other pages (like settings page)
+    const handleProfileUpdate = () => {
+      loadUserData();
+    };
+
+    window.addEventListener("profileUpdated", handleProfileUpdate);
     setLoading(false);
+
+    return () => {
+      window.removeEventListener("profileUpdated", handleProfileUpdate);
+    };
   }, []);
 
   const handleVehicleUpdate = async (data) => {
     try {
-      // Here you would typically make an API call to update vehicle info
-      console.log("Vehicle update submitted:", data);
+      const token = localStorage.getItem("token");
 
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (!token) {
+        setUpdateMessage("Please login again to update vehicle information.");
+        return;
+      }
 
-      setVehicleData({ ...vehicleData, ...data });
-      setUpdateMessage("Vehicle information updated successfully!");
+      // Get current user data from localStorage to ensure we send required fields
+      const currentUserData = JSON.parse(localStorage.getItem("user") || "{}");
 
-      setTimeout(() => {
-        setUpdateMessage("");
-      }, 3000);
+      // Map vehicle form data to backend format
+      // IMPORTANT: Include required fields (full_name and email) from current user
+      const updateData = {
+        full_name: currentUserData.full_name || "",
+        email: currentUserData.email || "",
+        vehicle_type: data.vehicle_type,
+        vehicle_plate: data.plate,
+        capacity: data.seats,
+        vehicle_model: data.description || "",
+        // Include vehicle_color if needed
+        vehicle_color: data.color || "",
+      };
+
+      const response = await fetch(
+        "http://localhost:5000/api/auth/update-profile",
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(updateData),
+        }
+      );
+
+      const result = await response.json();
+
+      if (response.ok) {
+        // IMPORTANT: Data has been saved to DATABASE by backend
+        // Now update localStorage for UI consistency (localStorage is just a cache)
+        const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+        const updatedUser = { ...currentUser, ...result.user };
+        localStorage.setItem("user", JSON.stringify(updatedUser));
+
+        // Update local state
+        setVehicleData({ ...vehicleData, ...updateData });
+        setUpdateMessage("Vehicle information updated successfully!");
+
+        // Dispatch event for other pages to update
+        window.dispatchEvent(new Event("profileUpdated"));
+
+        setTimeout(() => {
+          setUpdateMessage("");
+        }, 3000);
+      } else {
+        setUpdateMessage(
+          result.error || "Failed to update vehicle information"
+        );
+      }
     } catch (error) {
       console.error("Error updating vehicle:", error);
-      setUpdateMessage("Failed to update vehicle information");
+      setUpdateMessage(
+        "Network error. Please check your connection and try again."
+      );
     }
   };
 
@@ -148,9 +205,14 @@ export default function DriverVehicle() {
                     <label className="text-sm font-medium text-gray-500">
                       Vehicle Make & Model
                     </label>
-                    <p className="text-lg font-semibold text-gray-900">
-                      {vehicleData.year} {vehicleData.make} {vehicleData.model}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium bg-purple-100 text-purple-700">
+                        {vehicleData.vehicle_type}
+                      </span>
+                      <span className="text-lg font-semibold text-gray-900">
+                        {vehicleData.model}
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <label className="text-sm font-medium text-gray-500">
@@ -208,7 +270,7 @@ export default function DriverVehicle() {
         {/* Back Button */}
         <div className="mt-8 text-center">
           <button
-            onClick={() => router.push("/driver/dashboard")}
+            onClick={() => router.push("/driver")}
             className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
           >
             <svg

@@ -30,6 +30,7 @@ interface Driver {
   last_login: string | null;
   rides_completed: number;
   rating: number;
+  total_ratings: number;
 }
 
 interface Statistics {
@@ -56,7 +57,10 @@ const AdminDriversPage = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [driverToDelete, setDriverToDelete] = useState<Driver | null>(null);
   const [showDriverModal, setShowDriverModal] = useState(false);
+  const [showReviewsModal, setShowReviewsModal] = useState(false);
+  const [selectedDriverReviews, setSelectedDriverReviews] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingReviews, setIsLoadingReviews] = useState(false);
 
   useEffect(() => {
     fetchAllDrivers();
@@ -65,7 +69,7 @@ const AdminDriversPage = () => {
   const fetchAllDrivers = async () => {
     try {
       setIsLoading(true);
-      const response = await api.get('/admin/all-drivers');
+      const response = await api.get('/api/admin/all-drivers');
       setDrivers(response.data.drivers || []);
       setStatistics(response.data.statistics || {
         total_drivers: 0,
@@ -127,6 +131,22 @@ const AdminDriversPage = () => {
   const viewDriverDetails = (driver: Driver) => {
     setSelectedDriver(driver);
     setShowDriverModal(true);
+  };
+
+  const viewDriverReviews = async (driver: Driver) => {
+    try {
+      setIsLoadingReviews(true);
+      setSelectedDriver(driver);
+      const response = await api.get(`/api/admin/driver/${driver.id}/ratings`);
+      setSelectedDriverReviews(response.data);
+      setShowReviewsModal(true);
+    } catch (error: any) {
+      console.error('Failed to fetch driver reviews:', error);
+      setMessage('Failed to load driver reviews');
+      setMessageType('error');
+    } finally {
+      setIsLoadingReviews(false);
+    }
   };
 
   const handleActivateDriver = async (driverId: number) => {
@@ -353,7 +373,9 @@ const AdminDriversPage = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
                           <div className="font-medium">Rides: {driver.rides_completed}</div>
-                          <div className="text-sm text-gray-500">Rating: {driver.rating}/5</div>
+                          <div className="text-sm text-gray-500">
+                            Rating: {driver.rating}/5 ({driver.total_ratings} reviews)
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -367,6 +389,15 @@ const AdminDriversPage = () => {
                             title="View Details"
                           >
                             <Eye className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => viewDriverReviews(driver)}
+                            className="text-blue-600 hover:text-blue-900"
+                            title="View Reviews"
+                          >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
                           </button>
                           <button
                             onClick={() => handleDeleteDriver(driver.id)}
@@ -388,8 +419,8 @@ const AdminDriversPage = () => {
 
       {/* Driver Details Modal */}
       {showDriverModal && selectedDriver && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto border border-gray-300">
             <div className="border-b border-gray-200 p-5">
               <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold text-gray-900">Driver Details</h2>
@@ -398,7 +429,7 @@ const AdminDriversPage = () => {
                     setSelectedDriver(null);
                     setShowDriverModal(false);
                   }}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 p-2 rounded-full hover:bg-gray-100"
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -448,7 +479,9 @@ const AdminDriversPage = () => {
                 </div>
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <label className="text-xs font-semibold text-gray-500 uppercase">Rating</label>
-                  <p className="text-sm font-medium text-gray-900">{selectedDriver.rating}/5</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {selectedDriver.rating}/5 ({selectedDriver.total_ratings} reviews)
+                  </p>
                 </div>
                 <div className="bg-gray-50 p-3 rounded-lg">
                   <label className="text-xs font-semibold text-gray-500 uppercase">Registration Date</label>
@@ -466,8 +499,8 @@ const AdminDriversPage = () => {
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && driverToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 border border-gray-300">
             <div className="p-5">
               <h3 className="text-lg font-semibold text-gray-900">Delete Driver</h3>
               <p className="text-sm text-gray-600 mt-2">
@@ -497,5 +530,3 @@ const AdminDriversPage = () => {
     </div>
   );
 };
-
-export default AdminDriversPage;

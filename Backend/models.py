@@ -97,10 +97,45 @@ def create_tables():
         )
     ''')
 
+    # Ratings table for driver ratings by students
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ratings (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            ride_id INT NOT NULL,
+            student_id INT NOT NULL,
+            driver_id INT NOT NULL,
+            rating INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+            comment TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (ride_id) REFERENCES rides(id) ON DELETE CASCADE,
+            FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (driver_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE KEY unique_ride_rating (ride_id),
+            INDEX idx_driver_rating (driver_id),
+            INDEX idx_student_rating (student_id)
+        )
+    ''')
+
+    # Ride passengers table for multi-passenger rides
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS ride_passengers (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            ride_id INT NOT NULL,
+            student_id INT NOT NULL,
+            status ENUM('pending', 'confirmed', 'cancelled') DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (ride_id) REFERENCES rides(id) ON DELETE CASCADE,
+            FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE KEY unique_ride_passenger (ride_id, student_id),
+            INDEX idx_ride (ride_id),
+            INDEX idx_student (student_id)
+        )
+    ''')
+
     conn.commit()
     cursor.close()
     conn.close()
-    print("✅ Users and rides tables created!")
+    print("✅ Users, rides, ratings, and ride_passengers tables created!")
     
 
 
@@ -207,14 +242,14 @@ def verify_email_token(token):
     return user is not None
 
 
-def approve_user(user_id):
-    """Approve a user for full system access."""
+def activate_driver(driver_id):
+    """Activate a driver by marking them as approved."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
     cursor.execute(
-        'UPDATE users SET is_approved = TRUE WHERE id = %s',
-        (user_id,)
+        'UPDATE users SET is_approved = TRUE WHERE id = %s AND user_type = "driver"',
+        (driver_id,)
     )
 
     conn.commit()
@@ -558,7 +593,7 @@ def get_driver_rides(driver_id):
     cursor = conn.cursor(dictionary=True)
     
     cursor.execute('''
-        SELECT r.*, u.full_name as student_name, u.phone as student_phone
+        SELECT r.*, u.full_name as student_name, u.phone as student_phone, u.email as student_email
         FROM rides r
         LEFT JOIN users u ON r.student_id = u.id
         WHERE r.driver_id = %s
@@ -566,6 +601,19 @@ def get_driver_rides(driver_id):
     ''', (driver_id,))
     
     rides = cursor.fetchall()
+    
+    # Add passenger information for each ride
+    for ride in rides:
+        passengers = get_ride_passengers(ride['id'])
+        # Always include the primary student as first passenger
+        primary_passenger = {
+            'student_name': ride['student_name'],
+            'student_phone': ride['student_phone'],
+            'student_email': ride['student_email'],
+            'student_id': ride['student_id']
+        }
+        ride['passengers'] = [primary_passenger] + passengers
+    
     cursor.close()
     conn.close()
     
@@ -597,7 +645,7 @@ def get_pending_rides():
     cursor = conn.cursor(dictionary=True)
     
     cursor.execute('''
-        SELECT r.*, u.full_name as student_name, u.phone as student_phone
+        SELECT r.*, u.full_name as student_name, u.phone as student_phone, u.email as student_email
         FROM rides r
         JOIN users u ON r.student_id = u.id
         WHERE r.status = 'pending'
@@ -618,7 +666,7 @@ def get_ride_by_id(ride_id):
     
     cursor.execute('''
         SELECT r.*, 
-               u1.full_name as student_name, u1.phone as student_phone,
+               u1.full_name as student_name, u1.phone as student_phone, u1.email as student_email,
                u2.full_name as driver_name, u2.phone as driver_phone
         FROM rides r
         LEFT JOIN users u1 ON r.student_id = u1.id
@@ -653,6 +701,225 @@ def get_all_rides():
     conn.close()
     
     return rides
+
+
+# ============================================
+# RATING FUNCTIONS - For rating system
+# ============================================
+
+def create_rating(ride_id, student_id, driver_id, rating, comment=None):
+    """Create a rating for a completed ride."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        INSERT INTO ratings (ride_id, student_id, driver_id, rating, comment)
+        VALUES (%s, %s, %s, %s, %s)
+    ''', (ride_id, student_id, driver_id, rating, comment))
+    
+    conn.commit()
+    rating_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    
+    return rating_id
+
+
+def get_driver_ratings(driver_id):
+    """Get all ratings for a specific driver."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute('''
+        SELECT r.*, u.full_name as student_name, u.email as student_email, ride.pickup_location, ride.dropoff_location, ride.created_at as ride_date
+        FROM ratings r
+        JOIN users u ON r.student_id = u.id
+        JOIN rides ride ON r.ride_id = ride.id
+        WHERE r.driver_id = %s
+        ORDER BY r.created_at DESC
+    ''', (driver_id,))
+    
+    ratings = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    return ratings
+
+
+def get_driver_average_rating(driver_id):
+    """Get average rating for a driver."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT AVG(rating) as avg_rating, COUNT(*) as total_ratings
+        FROM ratings 
+        WHERE driver_id = %s
+    ''', (driver_id,))
+    
+    result = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    if result and result[0]:
+        return {
+            'average_rating': round(float(result[0]), 1),
+            'total_ratings': result[1]
+        }
+    return {
+        'average_rating': 0,
+        'total_ratings': 0
+    }
+
+
+def get_student_ratings_given(student_id):
+    """Get all ratings given by a student."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute('''
+        SELECT r.*, u.full_name as driver_name, ride.pickup_location, ride.dropoff_location
+        FROM ratings r
+        JOIN users u ON r.driver_id = u.id
+        JOIN rides ride ON r.ride_id = ride.id
+        WHERE r.student_id = %s
+        ORDER BY r.created_at DESC
+    ''', (student_id,))
+    
+    ratings = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    return ratings
+
+
+def get_student_average_rating_given(student_id):
+    """Get average rating given by a student."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT AVG(rating) as avg_rating, COUNT(*) as total_ratings
+        FROM ratings 
+        WHERE student_id = %s
+    ''', (student_id,))
+    
+    result = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    if result and result[0]:
+        return {
+            'average_rating': round(float(result[0]), 1),
+            'total_ratings': result[1]
+        }
+    return {
+        'average_rating': 0,
+        'total_ratings': 0
+    }
+
+
+def get_ride_rating(ride_id):
+    """Get rating for a specific ride."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute('''
+        SELECT * FROM ratings WHERE ride_id = %s
+    ''', (ride_id,))
+    
+    rating = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    return rating
+
+
+def can_rate_ride(ride_id, student_id):
+    """Check if a student can rate a ride (ride must be completed and not already rated)."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute('''
+        SELECT r.id, r.status, r.student_id, rt.id as rating_id
+        FROM rides r
+        LEFT JOIN ratings rt ON r.id = rt.ride_id
+        WHERE r.id = %s AND r.student_id = %s
+    ''', (ride_id, student_id))
+    
+    result = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    if not result:
+        return False
+    
+    # Can rate if ride is completed and not already rated
+    return result['status'] == 'completed' and result['rating_id'] is None
+
+
+def get_ride_passengers(ride_id):
+    """Get all passengers for a specific ride."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute('''
+        SELECT rp.*, u.full_name as student_name, u.phone as student_phone, u.email as student_email
+        FROM ride_passengers rp
+        JOIN users u ON rp.student_id = u.id
+        WHERE rp.ride_id = %s AND rp.status != 'cancelled'
+        ORDER BY rp.created_at ASC
+    ''', (ride_id,))
+    
+    passengers = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    return passengers
+
+
+def add_passenger_to_ride(ride_id, student_id):
+    """Add a passenger to an existing ride."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        INSERT INTO ride_passengers (ride_id, student_id, status)
+        VALUES (%s, %s, 'pending')
+        ON DUPLICATE KEY UPDATE status = 'pending'
+    ''', (ride_id, student_id))
+    
+    conn.commit()
+    passenger_id = cursor.lastrowid
+    cursor.close()
+    conn.close()
+    
+    return passenger_id
+
+
+def get_available_drivers_with_stats():
+    """Get all available drivers with their stats."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute('''
+        SELECT u.id, u.full_name, u.phone, u.email, u.vehicle_type, 
+               u.vehicle_model, u.vehicle_plate, u.capacity,
+               (SELECT COUNT(*) FROM rides WHERE driver_id = u.id AND status = 'completed') as total_rides,
+               (SELECT AVG(rating) FROM ratings WHERE driver_id = u.id) as avg_rating,
+               (SELECT COUNT(*) FROM ratings WHERE driver_id = u.id) as total_ratings
+        FROM users u
+        WHERE u.user_type = 'driver' 
+        AND u.is_verified = TRUE 
+        AND u.is_approved = TRUE
+        ORDER BY avg_rating DESC, total_rides DESC
+    ''')
+    
+    drivers = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    return drivers
 
 
 if __name__ == '__main__':

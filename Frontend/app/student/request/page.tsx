@@ -123,7 +123,7 @@ export default function StudentRequestRide() {
         {/* Back Button */}
         <div className="mt-8 text-center">
           <button
-            onClick={() => router.push("/student/dashboard")}
+            onClick={() => router.push("/student")}
             className="inline-flex items-center px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-medium rounded-lg hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:scale-[1.02]"
           >
             <svg

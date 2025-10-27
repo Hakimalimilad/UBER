@@ -27,9 +27,8 @@ const Layout = ({ children }: LayoutProps) => {
       if (pathname === '/admin') return 'Dashboard';
       if (pathname.includes('/approvals')) return 'User Approvals';
       if (pathname.includes('/management')) return 'User Management';
-      if (pathname.includes('/analytics')) return 'Analytics';
+      if (pathname.includes('/analytics')) return 'Driver Management';
       if (pathname.includes('/rides')) return 'Rides Log';
-      if (pathname.includes('/drivers')) return 'Drivers';
       if (pathname.includes('/students')) return 'Students';
       return 'Admin Panel';
     }

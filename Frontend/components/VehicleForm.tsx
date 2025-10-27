@@ -18,6 +18,7 @@ const VehicleForm = ({
     seats: vehicle?.seats || 4,
     plate: vehicle?.plate || "",
     description: vehicle?.description || "",
+    color: vehicle?.color || "",
   });
 
   // shared input class for consistent styling and strong contrast
@@ -97,6 +98,20 @@ const VehicleForm = ({
           value={formData.description}
           onChange={handleChange}
           className={inputClass}
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Vehicle Color
+        </label>
+        <input
+          type="text"
+          name="color"
+          value={formData.color}
+          onChange={handleChange}
+          className={inputClass}
+          placeholder="e.g., Black, White, Red"
         />
       </div>
 

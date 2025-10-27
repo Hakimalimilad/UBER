@@ -138,7 +138,6 @@ const Sidebar = ({
     id: string;
     label: string;
     icon: any;
-    badge?: number;
   }
 
   interface MenuItems {
@@ -155,7 +154,7 @@ const Sidebar = ({
       { id: "settings", label: "Settings", icon: Settings },
     ],
     driver: [
-      { id: "dashboard", label: "Dashboard", icon: Home, badge: 5 },
+      { id: "dashboard", label: "Dashboard", icon: Home },
       { id: "rides", label: "My Rides", icon: Car },
       { id: "available-rides", label: "Available Rides", icon: Clock },
       { id: "vehicle", label: "Vehicle", icon: Car },
@@ -166,7 +165,7 @@ const Sidebar = ({
       { id: "approvals", label: "Pending Approvals", icon: CheckSquare },
       { id: "users", label: "Users", icon: Users },
       { id: "rides", label: "Rides Log", icon: Clock },
-      { id: "analytics", label: "Analytics", icon: Activity },
+      { id: "analytics", label: "Driver Management", icon: Activity },
       { id: "settings", label: "Settings", icon: Settings },
     ],
   };
@@ -405,11 +404,6 @@ const Sidebar = ({
                         }`}
                       >
                         {item.label}
-                        {item.badge && (
-                          <span className="ml-2 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                            {item.badge}
-                          </span>
-                        )}
                       </span>
                     </button>
                   );
@@ -472,11 +466,6 @@ const Sidebar = ({
                         }`}
                       >
                         {item.label}
-                        {item.badge && (
-                          <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                            {item.badge}
-                          </span>
-                        )}
                       </span>
                     </button>
                   );

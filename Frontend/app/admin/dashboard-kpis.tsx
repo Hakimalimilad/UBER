@@ -36,17 +36,21 @@ export default function AdminDashboard() {
 
   const fetchDashboardStats = async () => {
     try {
-      const [usersRes, pendingRes] = await Promise.all([
+      const [usersRes, pendingRes, ridesRes] = await Promise.all([
         fetch('http://localhost:5000/api/admin/users', {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         }),
         fetch('http://localhost:5000/api/admin/pending-users', {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        }),
+        fetch('http://localhost:5000/api/admin/rides', {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         })
       ]);
 
       let users: any[] = [];
       let pending: any[] = [];
+      let rides: any[] = [];
 
       if (usersRes.ok) {
         const data = await usersRes.json();
@@ -58,6 +62,19 @@ export default function AdminDashboard() {
         pending = data.users || [];
       }
 
+      if (ridesRes.ok) {
+        const data = await ridesRes.json();
+        rides = data.rides || [];
+      }
+
+      // Calculate today's rides
+      const today = new Date().toDateString();
+      const todayRides = rides.filter((r: any) => {
+        if (!r.pickup_time) return false;
+        const rideDate = new Date(r.pickup_time).toDateString();
+        return rideDate === today;
+      });
+
       setStats({
         totalUsers: users.length,
         activeUsers: users.filter((u: any) => u.is_verified && u.is_approved).length,
@@ -65,10 +82,10 @@ export default function AdminDashboard() {
         activeDrivers: users.filter((u: any) => u.user_type === 'driver' && u.is_approved).length,
         totalStudents: users.filter((u: any) => u.user_type === 'student').length,
         pendingApprovals: pending.length,
-        totalRides: 0,
-        activeRides: 0,
-        todayRides: 0,
-        completedRides: 0
+        totalRides: rides.length,
+        activeRides: rides.filter((r: any) => ['pending', 'accepted', 'in_progress'].includes(r.status)).length,
+        todayRides: todayRides.length,
+        completedRides: rides.filter((r: any) => r.status === 'completed').length
       });
     } catch (error) {
       console.error('Failed to fetch dashboard stats:', error);
