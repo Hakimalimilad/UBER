@@ -114,4 +114,4 @@ npm start
 
 ---
 
-**Your platform is ready! 🎉**
+**platform is ready! 🎉**

@@ -379,4 +379,4 @@ Your Student Transport Platform is now ready for development and testing!
 3. Customize the platform for your specific needs
 4. Deploy to production when ready
 
-**Happy coding!** 🚗✨🎓
+*
