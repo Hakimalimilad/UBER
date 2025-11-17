@@ -242,22 +242,47 @@ def verify_email_token(token):
     return user is not None
 
 
-def activate_driver(driver_id):
-    """Activate a driver by marking them as approved."""
+def approve_user(user_id):
+    """Approve a user (student or driver) by marking them as approved."""
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
+    
+    try:
+        # First check if user exists and is verified
+        cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))
+        user = cursor.fetchone()
+        
+        if not user:
+            return {'success': False, 'message': 'User not found'}
+            
+        if not user.get('is_verified'):
+            return {'success': False, 'message': 'User email is not verified'}
+            
+        # Update user approval status
+        cursor.execute(
+            'UPDATE users SET is_approved = TRUE WHERE id = %s',
+            (user_id,)
+        )
+        conn.commit()
+        
+        return {
+            'success': True, 
+            'message': f"User {user_id} approved successfully",
+            'user_id': user_id,
+            'email': user.get('email'),
+            'user_type': user.get('user_type')
+        }
+    except Exception as e:
+        print(f"Error approving user: {e}")
+        return {'success': False, 'message': str(e)}
+    finally:
+        cursor.close()
+        conn.close()
 
-    cursor.execute(
-        'UPDATE users SET is_approved = TRUE WHERE id = %s AND user_type = "driver"',
-        (driver_id,)
-    )
 
-    conn.commit()
-    affected = cursor.rowcount
-    cursor.close()
-    conn.close()
-
-    return affected > 0
+def activate_driver(driver_id):
+    """Deprecated: Use approve_user() instead."""
+    return approve_user(driver_id)
 
 
 def get_pending_users():
@@ -399,6 +424,43 @@ def update_user_role(user_id, new_role):
     conn.close()
     
     return affected > 0
+
+
+def delete_user(user_id):
+    """
+    Permanently delete a user from the database.
+    Returns True if successful, False otherwise.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # First, check if the user exists
+        cursor.execute('SELECT id FROM users WHERE id = %s', (user_id,))
+        if not cursor.fetchone():
+            return {'success': False, 'message': 'User not found'}
+            
+        # Delete the user (foreign key constraints will handle related records)
+        cursor.execute('DELETE FROM users WHERE id = %s', (user_id,))
+        conn.commit()
+        
+        return {
+            'success': True,
+            'message': f'User {user_id} deleted successfully',
+            'user_id': user_id
+        }
+        
+    except Exception as e:
+        conn.rollback()
+        print(f"Error deleting user: {e}")
+        return {
+            'success': False,
+            'message': f'Error deleting user: {str(e)}',
+            'user_id': user_id
+        }
+    finally:
+        cursor.close()
+        conn.close()
 
 
 def update_user_profile(user_id, full_name, email, phone, profile_picture=None, student_id=None, major=None, year=None, campus_location=None, pickup_location=None, dropoff_location=None, parent_name=None, parent_phone=None, emergency_contact=None, license_number=None, vehicle_type=None, vehicle_model=None, vehicle_plate=None, vehicle_color=None, capacity=None):

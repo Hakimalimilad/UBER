@@ -1,0 +1,251 @@
+@startuml Student Transport System - Class Diagram
+
+' Styling
+skinparam class {
+    BackgroundColor White
+    ArrowColor #2c3e50
+    BorderColor #2c3e50
+    BackgroundColor<<Entity>> #E8F8F5
+    BackgroundColor<<Service>> #FEF9E7
+    BackgroundColor<<Controller>> #F5EEF8
+}
+
+' Database Tables as Classes
+class User << (E, #FFE4B5) Entity >> {
+    +id: int
+    +email: string
+    +password_hash: string
+    +full_name: string
+    +user_type: enum('student', 'driver', 'admin')
+    +phone: string
+    +is_verified: boolean
+    +is_approved: boolean
+    +verification_token: string
+    +reset_token: string
+    +reset_token_expiry: datetime
+    +created_at: timestamp
+    --
+    +verify_password()
+    +update_profile()
+}
+
+class Student << (E, #FFE4B5) Entity >> {
+    +student_id: string
+    +pickup_location: string
+    +dropoff_location: string
+    +parent_name: string
+    +parent_phone: string
+    +emergency_contact: string
+}
+
+class Driver << (E, #FFE4B5) Entity >> {
+    +license_number: string
+    +vehicle_type: string
+    +vehicle_model: string
+    +vehicle_plate: string
+    +capacity: int
+}
+
+class Ride << (E, #FFE4B5) Entity >> {
+    +id: int
+    +student_id: int
+    +driver_id: int
+    +pickup_location: string
+    +dropoff_location: string
+    +pickup_time: datetime
+    +status: enum('pending', 'accepted', 'in_progress', 'completed', 'cancelled')
+    +notes: text
+    +created_at: timestamp
+    +updated_at: timestamp
+}
+
+class Rating << (E, #FFE4B5) Entity >> {
+    +id: int
+    +ride_id: int
+    +student_id: int
+    +driver_id: int
+    +rating: int
+    +comment: text
+    +created_at: timestamp
+}
+
+class RidePassenger << (E, #FFE4B5) Entity >> {
+    +id: int
+    +ride_id: int
+    +student_id: int
+    +status: enum('pending', 'confirmed', 'cancelled')
+    +created_at: timestamp
+}
+
+' Services
+class AuthService << (S, #D5F5E3) Service >> {
+    +register_user()
+    +login_user()
+    +verify_email()
+    +reset_password()
+    +change_password()
+}
+
+class RideService << (S, #D5F5E3) Service >> {
+    +create_ride()
+    +get_available_drivers()
+    +accept_ride()
+    +update_ride_status()
+    +get_ride_details()
+}
+
+class RatingService << (S, #D5F5E3) Service >> {
+    +create_rating()
+    +get_driver_ratings()
+    +get_average_rating()
+    +can_rate_ride()
+}
+
+class TransportEmailService << (S, #D5F5E3) Service >> {
+    -smtp_server: string
+    -smtp_port: int
+    -smtp_username: string
+    -smtp_password: string
+    --
+    +send_verification_email()
+    +send_password_reset_email()
+    +send_approval_email()
+    +send_ride_notification()
+    -_send_email_with_retry()
+    -_get_verification_html_template()
+}
+
+' Controllers
+class UserController << (C, #F5D0A9) Controller >> {
+    +register()
+    +login()
+    +get_profile()
+    +update_profile()
+    +change_password()
+}
+
+class RideController << (C, #F5D0A9) Controller >> {
+    +request_ride()
+    +get_available_rides()
+    +accept_ride()
+    +update_ride_status()
+    +get_ride_history()
+}
+
+' Relationships
+User <|-- Student
+User <|-- Driver
+
+Ride "1" -- "1" Student : requested by
+Ride "1" -- "0..1" Driver : assigned to
+Ride "1" -- "0..1" Rating : has
+Ride "1" -- "*" RidePassenger : has
+
+AuthService --> User : manages
+RideService --> Ride : manages
+RideService --> Driver : assigns
+RatingService --> Rating : manages
+TransportEmailService ..> User : notifies
+
+UserController --> AuthService : uses
+RideController --> RideService : uses
+RideController --> RatingService : uses
+
+' Classes
+class User << (E, #FFE4B5) Entity >> {
+    +id: int
+    +email: string
+    +password_hash: string
+    +full_name: string
+    +user_type: enum
+    +is_verified: boolean
+    +is_approved: boolean
+    +created_at: datetime
+    +__init__()
+    +verify_password()
+    +update_profile()
+}
+
+class Student << (E, #FFE4B5) Entity >> {
+    +student_id: string
+    +pickup_location: string
+    +dropoff_location: string
+    +parent_contact: string
+    +request_ride()
+    +rate_ride()
+    +view_ride_history()
+}
+
+class Driver << (E, #FFE4B5) Entity >> {
+    +license_number: string
+    +vehicle_type: string
+    +vehicle_plate: string
+    +capacity: int
+    +accept_ride()
+    +update_ride_status()
+    +view_earnings()
+}
+
+class Admin << (E, #FFE4B5) Entity >> {
+    +manage_users()
+    +view_reports()
+    +approve_drivers()
+}
+
+class Ride << (E, #FFE4B5) Entity >> {
+    +id: int
+    +student_id: int
+    +driver_id: int
+    +pickup_location: string
+    +dropoff_location: string
+    +pickup_time: datetime
+    +status: enum
+    +created_at: datetime
+    +update_status()
+    +calculate_fare()
+}
+
+class Rating << (E, #FFE4B5) Entity >> {
+    +id: int
+    +ride_id: int
+    +rating: int
+    +comment: string
+    +created_at: datetime
+    +add_comment()
+}
+
+class AuthService << (S, #D5F5E3) Service >> {
+    +register()
+    +login()
+    +verify_email()
+    +reset_password()
+}
+
+class RideService << (S, #D5F5E3) Service >> {
+    +request_ride()
+    +find_available_drivers()
+    +update_ride_status()
+    +calculate_estimated_fare()
+}
+
+class NotificationService << (S, #D5F5E3) Service >> {
+    +send_verification_email()
+    +send_ride_request()
+    +send_ride_status_update()
+}
+
+' Relationships
+User <|-- Student
+User <|-- Driver
+User <|-- Admin
+
+Ride "1" -- "1" Student : requested by
+Ride "1" -- "0..1" Driver : assigned to
+Ride "1" -- "0..1" Rating : has
+
+AuthService ..> User : manages
+RideService ..> Ride : manages
+RideService ..> Driver : assigns
+NotificationService ..> User : notifies
+
+@enduml

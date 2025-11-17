@@ -1,0 +1,96 @@
+@startuml Student Transport System - Use Case Diagram
+left to right direction
+skinparam usecase {
+    BackgroundColor LightBlue
+    BorderColor DarkBlue
+    ArrowColor DarkBlue
+    ActorBorderColor black
+    ActorFontColor black
+}
+
+' Actors
+actor "Student" as student #LightGreen
+actor "Driver" as driver #LightPink
+actor "Admin" as admin #LightGray
+
+' ========== Student Use Cases ==========
+usecase "Register Account" as UC1
+usecase "Verify Email" as UC2
+usecase "Login" as UC3
+usecase "Request Ride" as UC4
+usecase "Track Ride" as UC5
+usecase "Rate Driver" as UC6
+usecase "View Ride History" as UC7
+usecase "Update Profile" as UC8
+usecase "Reset Password" as UC9
+usecase "View Available Drivers" as UC10
+usecase "Join Shared Ride" as UC11
+
+' ========== Driver Use Cases ==========
+usecase "Register as Driver" as UC20
+usecase "Complete Profile" as UC21
+usecase "View Ride Requests" as UC22
+usecase "Accept/Reject Ride" as UC23
+usecase "Update Ride Status" as UC24
+usecase "View Earnings" as UC25
+usecase "View Ratings" as UC26
+usecase "Mark Self Available/Unavailable" as UC27
+
+' ========== Admin Use Cases ==========
+usecase "Manage Users" as UC30
+usecase "Approve/Reject Drivers" as UC31
+usecase "View All Rides" as UC32
+usecase "View System Reports" as UC33
+usecase "Send Notifications" as UC34
+usecase "View Driver Ratings" as UC35
+
+' ========== Student Relationships ==========
+student --> UC1
+student --> UC3
+student --> UC4
+student --> UC5
+student --> UC6
+student --> UC7
+student --> UC8
+student --> UC9
+student --> UC10
+student --> UC11
+
+' ========== Driver Relationships ==========
+driver --> UC20
+driver --> UC21
+driver --> UC22
+driver --> UC23
+driver --> UC24
+driver --> UC25
+driver --> UC26
+driver --> UC27
+
+' ========== Admin Relationships ==========
+admin --> UC30
+admin --> UC31
+admin --> UC32
+admin --> UC33
+admin --> UC34
+admin --> UC35
+
+' ========== Extend/Include Relationships ==========
+UC1 ..> UC2 : includes
+UC4 ..> UC10 : includes
+UC23 ..> UC22 : extends
+UC24 ..> UC23 : extends
+UC30 ..> UC31 : includes
+UC33 ..> UC35 : includes
+
+' ========== System Use Cases ==========
+usecase "Send Email Notifications" as UC50 #LightGray
+usecase "Process Payments" as UC51 #LightGray
+usecase "Track Driver Location" as UC52 #LightGray
+
+' System relationships
+UC4 ..> UC50 : includes
+UC23 ..> UC50 : includes
+UC24 ..> UC50 : includes
+UC34 ..> UC50 : includes
+
+@enduml

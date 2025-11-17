@@ -1,0 +1,110 @@
+@startuml Student Transport System - Ride Request Sequence
+
+title Ride Request Flow
+
+actor Student as student #LightGreen
+participant "Frontend" as frontend #LightBlue
+participant "Flask API" as api #LightPink
+participant "Ride Service" as ride_service #LightYellow
+participant "User Service" as user_service #LightCyan
+participant "Email Service" as email_service #MistyRose
+participant "Driver" as driver #FFA07A
+
+database "MySQL" as db #ADD8E6
+
+' Styling
+skinparam sequence {
+    ArrowColor #2c3e50
+    ActorBorderColor #2c3e50
+    LifeLineBorderColor #2c3e50
+    LifeLineBackgroundColor #F9F9F9
+    ParticipantBorderColor #2c3e50
+    ParticipantBackgroundColor #FFFFFF
+    ParticipantFontStyle bold
+}
+
+' === Ride Request ===
+student -> frontend: 1. Request Ride (pickup, dropoff, time, notes)
+activate frontend
+
+frontend -> api: 2. POST /api/rides {JSON}
+activate api
+
+api -> ride_service: 3. create_ride(student_id, pickup, dropoff, time, notes)
+activate ride_service
+
+ride_service -> db: 4. INSERT INTO rides
+activate db
+db --> ride_service: 5. New ride ID
+
+ride_service -> user_service: 6. get_available_drivers(pickup_location)
+activate user_service
+user_service -> db: 7. SELECT drivers WHERE available=true
+user_service --> ride_service: 8. List of available drivers
+
+ride_service -> ride_service: 9. Select best driver
+ride_service -> db: 10. UPDATE rides SET driver_id=?, status='pending'
+
+ride_service -> email_service: 11. send_ride_notification(driver_id, ride_details)
+activate email_service
+email_service -> email_service: 12. Prepare email with ride details
+email_service -> db: 13. Get driver email
+email_service -> SMTP: 14. Send notification email
+email_service --> ride_service: 15. Notification sent
+
+ride_service --> api: 16. Ride created response
+api --> frontend: 17. 201 Created {ride_id, status}
+frontend --> student: 18. Show ride requested, waiting for driver
+
+' === Driver Accepts Ride ===
+Driver checks email and logs in
+
+driver -> frontend: 19. View ride request
+frontend -> api: 20. GET /api/rides/available
+api -> ride_service: 21. get_available_rides()
+ride_service -> db: 22. SELECT * FROM rides WHERE status='pending'
+ride_service --> api: 23. List of available rides
+api --> frontend: 24. Show available rides
+frontend --> driver: 25. Display ride requests
+
+driver -> frontend: 26. Accept ride {ride_id}
+frontend -> api: 27. POST /api/rides/{id}/accept
+api -> ride_service: 28. accept_ride(ride_id, driver_id)
+
+ride_service -> db: 29. UPDATE rides SET status='accepted', driver_id=?
+ride_service -> email_service: 30. send_ride_accepted(student_email, driver_details)
+email_service -> SMTP: 31. Send acceptance email
+email_service --> ride_service: 32. Email sent
+
+ride_service --> api: 33. Ride accepted
+api --> frontend: 34. 200 OK
+frontend --> driver: 35. Show ride accepted, navigate to pickup
+
+' === Ride Completion ===
+driver -> frontend: 36. Mark ride as completed
+frontend -> api: 37. POST /api/rides/{id}/complete {rating, comment}
+api -> ride_service: 38. complete_ride(ride_id, rating, comment)
+
+ride_service -> db: 39. UPDATE rides SET status='completed'
+ride_service -> db: 40. INSERT INTO ratings (ride_id, student_id, driver_id, rating, comment)
+ride_service -> email_service: 41. send_ride_completed(student_email, ride_details)
+email_service -> SMTP: 42. Send completion email
+
+ride_service --> api: 43. Ride completed
+api --> frontend: 44. 200 OK
+frontend --> driver: 45. Show ride completed
+
+' === Student Rates Driver ===
+student -> frontend: 46. Rate driver {rating, comment}
+frontend -> api: 47. POST /api/ratings {ride_id, rating, comment}
+api -> ride_service: 48. add_rating(ride_id, student_id, rating, comment)
+ride_service -> db: 49. INSERT INTO ratings
+ride_service --> api: 50. Rating saved
+api --> frontend: 51. 201 Created
+frontend --> student: 52. Thank you for rating!
+
+deactivate ride_service
+deactivate api
+deactivate frontend
+
+@enduml

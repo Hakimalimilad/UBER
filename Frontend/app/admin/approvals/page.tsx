@@ -124,19 +124,34 @@ export default function AdminApprovals() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {message && (
           <div
-            className={`mb-6 rounded-md p-4 ${
-              messageType === "success" ? "bg-green-50" : "bg-red-50"
+            className={`mb-6 rounded-lg p-4 shadow-md ${
+              messageType === "success" 
+                ? "bg-green-100 border-l-4 border-green-500" 
+                : "bg-red-100 border-l-4 border-red-500"
             }`}
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 {messageType === "success" ? (
-                  <CheckCircle className="h-5 w-5 text-green-400 mr-2" />
+                  <CheckCircle className="h-6 w-6 text-green-600 mr-3" />
                 ) : (
-                  <XCircle className="h-5 w-5 text-red-400 mr-2" />
+                  <XCircle className="h-6 w-6 text-red-600 mr-3" />
                 )}
-                <p className="text-sm font-medium">{message}</p>
+                <p 
+                  className={`text-base font-semibold ${
+                    messageType === "success" ? "text-green-800" : "text-red-800"
+                  }`}
+                >
+                  {message}
+                </p>
               </div>
+              <button 
+                onClick={() => setMessage("")}
+                className="text-gray-500 hover:text-gray-700 focus:outline-none"
+                aria-label="Dismiss message"
+              >
+                <XCircle className="h-5 w-5" />
+              </button>
             </div>
           </div>
         )}

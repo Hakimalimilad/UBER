@@ -1,0 +1,86 @@
+@startuml Student Transport System - Component Diagram
+
+skinparam component {
+    BackgroundColor White
+    BorderColor #2c3e50
+    ArrowColor #2c3e50
+    BackgroundColor<<Database>> #E8F8F5
+    BackgroundColor<<Service>> #FEF9E7
+    BackgroundColor<<External>> #F5EEF8
+}
+
+' Main Components
+package "Student Transport System" {
+    [Web Frontend] as frontend #LightBlue
+    [Mobile App] as mobile #LightGreen
+    
+    package "API Layer" as api {
+        [Flask API] as flask_api #LightPink {
+            [Auth Routes] as auth_routes
+            [User Routes] as user_routes
+            [Ride Routes] as ride_routes
+            [Admin Routes] as admin_routes
+        }
+    }
+    
+    package "Business Logic" as services {
+        [Auth Service] as auth_service #LightYellow
+        [User Service] as user_service #LightYellow
+        [Ride Service] as ride_service #LightYellow
+        [Email Service] as email_service #LightYellow
+        [Rating Service] as rating_service #LightYellow
+    }
+    
+    package "Data Access" as data_access {
+        [Database Connection Pool] as db_pool #LightCyan
+        
+        package "Models" as models {
+            [User Model] as user_model
+            [Ride Model] as ride_model
+            [Rating Model] as rating_model
+        }
+    }
+    
+    package "External Services" as external {
+        [SMTP Server] as smtp_server <<External>> #MistyRose
+        [MySQL Database] as mysql_db <<Database>> #LightCyan
+    }
+}
+
+' Internal Connections
+frontend --> flask_api : HTTP/HTTPS (REST)
+mobile --> flask_api : HTTP/HTTPS (REST)
+
+' API to Services
+flask_api --> auth_service
+flask_api --> user_service
+flask_api --> ride_service
+flask_api --> email_service
+flask_api --> rating_service
+
+' Services to Data Access
+user_service --> user_model
+ride_service --> ride_model
+rating_service --> rating_model
+
+' Models to Database
+user_model --> db_pool
+ride_model --> db_pool
+rating_model --> db_pool
+
+db_pool --> mysql_db : JDBC
+email_service --> smtp_server : SMTP
+
+' Add notes
+note top of frontend : React.js SPA
+note top of mobile : React Native
+note top of flask_api : Flask REST API
+note right of auth_service : JWT Authentication
+note right of email_service : Handles all email notifications
+note bottom of mysql_db : MySQL 8.0+
+
+' Styling for clarity
+skinparam componentStyle uml2
+skinparam linetype ortho
+
+@enduml

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import MainLayout from '../../../../components/MainLayout';
-import { ArrowLeft, CheckCircle, User, GraduationCap, Car } from 'lucide-react';
+import { ArrowLeft, CheckCircle, User, GraduationCap, Car, XCircle, Loader2, AlertTriangle, Info, Clock } from 'lucide-react';
 
 export default function ViewUserProfile() {
   const router = useRouter();
@@ -11,8 +11,18 @@ export default function ViewUserProfile() {
   const userId = params?.id;
   const [userData, setUserData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [processing, setProcessing] = useState(false);
+  const [message, setMessage] = useState('');
+  const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('success');
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
 
   useEffect(() => {
+    // Get current user ID from localStorage
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user && user.id) {
+      setCurrentUserId(user.id);
+    }
+    
     if (userId) {
       fetchUserData();
     }
@@ -29,9 +39,26 @@ export default function ViewUserProfile() {
       if (response.ok) {
         const data = await response.json();
         setUserData(data.user);
+        
+        // Only show message for unverified users or if there's an error
+        if (!data.user.is_verified) {
+          setMessage('User email is not verified yet');
+          setMessageType('error');
+        } else if (data.user.is_approved) {
+          setMessage('User is approved and verified');
+          setMessageType('success');
+        } else {
+          // Clear any existing messages for pending users
+          setMessage('');
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch user data');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch user data:', error);
+      setMessage(error.message || 'Failed to load user data');
+      setMessageType('error');
     } finally {
       setLoading(false);
     }
@@ -39,19 +66,38 @@ export default function ViewUserProfile() {
 
   const approveUser = async () => {
     try {
-      const response = await fetch(`http://localhost:5000/api/admin/approve-user/${userId}`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+      setProcessing(true);
+      setMessage('');
+      const response = await fetch(
+        `http://localhost:5000/api/admin/approve-user/${userId}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Content-Type': 'application/json',
+          },
         }
-      });
+      );
 
+      const data = await response.json();
       if (response.ok) {
-        alert('User approved successfully!');
-        router.push('/admin/users');
+        setMessage(data.message || 'User approved successfully!');
+        setMessageType('success');
+        // Update the user data to reflect the approval
+        setUserData((prev: any) => ({
+          ...prev,
+          is_approved: true,
+          is_verified: true,
+        }));
+      } else {
+        throw new Error(data.error || 'Failed to approve user');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to approve user:', error);
+      setMessage(error.message || 'Failed to approve user');
+      setMessageType('error');
+    } finally {
+      setProcessing(false);
     }
   };
 
@@ -92,13 +138,30 @@ export default function ViewUserProfile() {
               <p className="text-gray-600 mt-1">Review user information before approval</p>
             </div>
           </div>
-          <button
-            onClick={approveUser}
-            className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center shadow-lg"
-          >
-            <CheckCircle className="w-5 h-5 mr-2" />
-            Approve User
-          </button>
+          <div className={`px-6 py-3 rounded-lg flex items-center ${
+            !userData.is_verified 
+              ? 'bg-yellow-100 text-yellow-800' 
+              : !userData.is_approved 
+                ? 'bg-yellow-100 text-yellow-800' 
+                : 'bg-green-100 text-green-800'
+          }`}>
+            {!userData.is_verified ? (
+              <>
+                <AlertTriangle className="w-5 h-5 mr-2" />
+                Email Not Verified
+              </>
+            ) : !userData.is_approved ? (
+              <>
+                <Clock className="w-5 h-5 mr-2" />
+                Pending Approval
+              </>
+            ) : (
+              <>
+                <CheckCircle className="w-5 h-5 mr-2" />
+                Approved
+              </>
+            )}
+          </div>
         </div>
 
         {/* Read-Only Settings Form */}
@@ -254,23 +317,63 @@ export default function ViewUserProfile() {
           )}
 
           {/* Action Buttons */}
-          <div className="p-6 bg-gray-50 flex justify-between items-center">
+          <div className="flex justify-between items-center">
             <button
               onClick={() => router.push('/admin/users')}
               className="px-6 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-100 transition-colors"
             >
               Back to Users
             </button>
-            <button
-              onClick={approveUser}
-              className="px-6 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center shadow-lg"
-            >
-              <CheckCircle className="w-5 h-5 mr-2" />
-              Approve User
-            </button>
+            {currentUserId !== userData.id && !userData.is_approved && (
+              <button
+                onClick={approveUser}
+                className="px-6 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors flex items-center shadow-lg"
+              >
+                <CheckCircle className="w-5 h-5 mr-2" />
+                Approve User
+              </button>
+            )}
           </div>
         </div>
       </div>
+      
+      {/* Message Display */}
+      {message && (
+        <div className="fixed bottom-4 right-4 z-50">
+          <div
+            className={`flex items-center p-4 rounded-lg shadow-lg ${
+              messageType === 'success'
+                ? 'bg-green-100 border-l-4 border-green-500'
+                : messageType === 'error'
+                ? 'bg-red-100 border-l-4 border-red-500'
+                : 'bg-blue-100 border-l-4 border-blue-500'
+            }`}
+          >
+            {messageType === 'success' ? (
+              <CheckCircle className="h-6 w-6 text-green-600 mr-3" />
+            ) : messageType === 'error' ? (
+              <XCircle className="h-6 w-6 text-red-600 mr-3" />
+            ) : (
+              <Info className="h-6 w-6 text-blue-600 mr-3" />
+            )}
+            <div>
+              <p
+                className={`text-sm font-medium ${
+                  messageType === 'success' ? 'text-green-800' : 'text-red-800'
+                }`}
+              >
+                {message}
+              </p>
+            </div>
+            <button
+              onClick={() => setMessage('')}
+              className="ml-4 text-gray-500 hover:text-gray-700 focus:outline-none"
+            >
+              <XCircle className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 }

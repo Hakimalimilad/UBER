@@ -781,10 +781,10 @@ def approve_user_endpoint(current_user, user_id):
         if not user:
             return jsonify({'error': 'User not found'}), 404
 
-        # Approve the user
-        success = approve_user(user_id)
+        # Approve the user using the new function
+        result = approve_user(user_id)
 
-        if success:
+        if result.get('success'):
             # Send approval email
             email_sent = send_approval_email(
                 email=user['email'],
@@ -794,11 +794,42 @@ def approve_user_endpoint(current_user, user_id):
 
             return jsonify({
                 'message': f'User {user["full_name"]} approved successfully!',
-                'email_sent': email_sent
+                'email_sent': email_sent,
+                'user_id': user_id,
+                'user_type': user['user_type']
             }), 200
         else:
-            return jsonify({'error': 'Failed to approve user'}), 400
+            return jsonify({
+                'error': result.get('message', 'Failed to approve user')
+            }), 400
 
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/users/<int:user_id>', methods=['DELETE'])
+@admin_required
+def delete_user_endpoint(current_user, user_id):
+    """Delete a user (admin only)."""
+    try:
+        # Prevent deleting yourself
+        if current_user['user_id'] == user_id:
+            return jsonify({'error': 'Cannot delete your own account'}), 400
+            
+        from models import delete_user
+        
+        result = delete_user(user_id)
+        
+        if result.get('success'):
+            return jsonify({
+                'message': result['message'],
+                'user_id': user_id
+            }), 200
+        else:
+            return jsonify({
+                'error': result.get('message', 'Failed to delete user')
+            }), 400
+            
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

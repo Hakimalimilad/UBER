@@ -16,6 +16,9 @@ import {
   Car,
   Search,
   Filter,
+  Trash2,
+  AlertTriangle,
+  X
 } from "lucide-react";
 
 interface User {
@@ -44,8 +47,16 @@ export default function AdminUsersPage() {
   const [statusFilter, setStatusFilter] = useState<
     "all" | "approved" | "pending" | "unverified"
   >("all");
+  const [deleteUserId, setDeleteUserId] = useState<number | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null);
 
   useEffect(() => {
+    // Get current user ID from localStorage
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (user && user.id) {
+      setCurrentUserId(user.id);
+    }
     fetchAllUsers();
   }, []);
 
@@ -85,6 +96,37 @@ export default function AdminUsersPage() {
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  const handleDeleteUser = async (userId: number) => {
+    try {
+      setIsDeleting(true);
+      const response = await fetch(`http://localhost:5000/api/admin/users/${userId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setMessage(data.message || 'User deleted successfully');
+        setMessageType('success');
+        // Remove the deleted user from the list
+        setUsers(users.filter(user => user.id !== userId));
+      } else {
+        throw new Error(data.error || 'Failed to delete user');
+      }
+    } catch (error: any) {
+      console.error('Error deleting user:', error);
+      setMessage(error.message || 'Failed to delete user');
+      setMessageType('error');
+    } finally {
+      setIsDeleting(false);
+      setDeleteUserId(null);
+    }
   };
 
   const getUserTypeDisplay = (userType: string) => {
@@ -429,6 +471,19 @@ export default function AdminUsersPage() {
                             <Eye className="w-4 h-4 mr-2" />
                             View
                           </button>
+                          {currentUserId !== user.id && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setDeleteUserId(user.id);
+                              }}
+                              className="inline-flex items-center px-3 py-2 border border-red-300 text-sm leading-4 font-medium rounded-md text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 ml-2"
+                              disabled={isDeleting}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -471,6 +526,65 @@ export default function AdminUsersPage() {
           </div>
         </div>
       </div>
+      
+      {/* Delete Confirmation Modal */}
+      {deleteUserId !== null && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 border border-gray-300">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Delete User</h2>
+              <button
+                onClick={() => setDeleteUserId(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-2 rounded-full hover:bg-gray-100"
+                disabled={isDeleting}
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              <div className="flex items-start">
+                <div className="flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                  <AlertTriangle className="h-6 w-6 text-red-600" />
+                </div>
+                <div className="ml-4">
+                  <h3 className="text-lg font-medium text-gray-900">Confirm Deletion</h3>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Are you sure you want to delete this user? This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="mt-6 flex justify-end space-x-3">
+                <button
+                  type="button"
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  onClick={() => setDeleteUserId(null)}
+                  disabled={isDeleting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50 flex items-center"
+                  onClick={() => handleDeleteUser(deleteUserId)}
+                  disabled={isDeleting}
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="animate-spin -ml-1 mr-2 h-4 w-4" />
+                      Deleting...
+                    </>
+                  ) : 'Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </MainLayout>
   );
 }
